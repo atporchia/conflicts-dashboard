@@ -6,11 +6,9 @@ import type { Conflict } from '@/lib/types';
 
 interface ConflictMapProps {
   conflicts: Conflict[];
-  onCountrySelect?: (country: string) => void;
-  selectedCountry?: string | null;
 }
 
-export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: ConflictMapProps) {
+export function ConflictMap({ conflicts }: ConflictMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
@@ -66,9 +64,9 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
           `);
 
           circle.on('click', () => {
-            // Clicking a marker selects the first country
-            if (conflict.countries_involved.length > 0 && onCountrySelect) {
-              onCountrySelect(conflict.countries_involved[0]);
+            // Navigate to filter by first country
+            if (conflict.countries_involved.length > 0) {
+              window.location.href = `/?country=${encodeURIComponent(conflict.countries_involved[0])}`;
             }
           });
         }
@@ -94,7 +92,7 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
         mapRef.current = null;
       }
     };
-  }, [conflicts, onCountrySelect]);
+  }, [conflicts]);
 
   return (
     <div

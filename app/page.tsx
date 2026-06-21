@@ -84,10 +84,7 @@ export default async function Home({
             </h2>
             <div className="aspect-video rounded-lg overflow-hidden">
               <Suspense fallback={<div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-500">Loading map...</div>}>
-                <ConflictMap 
-                  conflicts={conflictsData.data} 
-                  selectedCountry={selectedCountry}
-                />
+                <ConflictMap conflicts={conflictsData.data} />
               </Suspense>
             </div>
           </div>
