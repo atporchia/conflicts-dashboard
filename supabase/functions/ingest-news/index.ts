@@ -1,6 +1,6 @@
 // Supabase Edge Function: ingest-news
 // Fetches RSS feeds, matches articles to conflicts, inserts into database
-// Scheduled via pg_cron: every 30 minutes
+// Scheduled via pg_cron: every 4 hours
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0';
@@ -102,28 +102,40 @@ function matchArticleToConflict(headline: string, summary: string): { conflict_s
   let bestMatch: { conflict_slug: string; score: number } | null = null;
 
   for (const [slug, config] of Object.entries(CONFLICT_KEYWORDS)) {
-    let score = 0;
+    let keywordMatches = 0;
+    let countryMatches = 0;
     
-    // Check keyword matches
+    // Check keyword matches (must have at least 1)
     for (const keyword of config.keywords) {
       if (text.includes(keyword.toLowerCase())) {
-        score += 1;
+        keywordMatches++;
       }
     }
     
     // Check country matches
     for (const country of config.countries) {
       if (text.includes(country.toLowerCase())) {
-        score += 2; // Country matches are weighted higher
+        countryMatches++;
       }
     }
     
-    // Normalize score
-    const maxPossible = config.keywords.length + config.countries.length * 2;
-    const normalizedScore = maxPossible > 0 ? score / maxPossible : 0;
+    // Require at least 1 keyword match to avoid false positives
+    // Country-only matches (e.g., "India" in non-Kashmir article) are ignored
+    if (keywordMatches === 0) {
+      continue;
+    }
     
-    if (normalizedScore > 0.15 && (!bestMatch || normalizedScore > bestMatch.score)) {
-      bestMatch = { conflict_slug: slug, score: normalizedScore };
+    // Calculate score: keywords are primary, countries boost the score
+    let score = keywordMatches / config.keywords.length;
+    if (countryMatches > 0) {
+      score += 0.2; // Boost for country match
+    }
+    
+    // Normalize to 0-1 range
+    score = Math.min(score, 1.0);
+    
+    if (score > 0.15 && (!bestMatch || score > bestMatch.score)) {
+      bestMatch = { conflict_slug: slug, score };
     }
   }
 
