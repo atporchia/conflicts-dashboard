@@ -3,11 +3,13 @@ import { ConflictMap } from '@/components/map/conflict-map';
 import { StatsOverview } from '@/components/dashboard/stats-overview';
 import { RecentUpdates } from '@/components/dashboard/recent-updates';
 
+export const dynamic = 'force-dynamic';
+
 async function getConflicts() {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const res = await fetch(`${baseUrl}/api/conflicts?limit=50`, {
-      next: { revalidate: 60 },
+      cache: 'no-store',
     });
     
     if (!res.ok) {
@@ -25,7 +27,7 @@ async function getNews() {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const res = await fetch(`${baseUrl}/api/news?limit=10`, {
-      next: { revalidate: 60 },
+      cache: 'no-store',
     });
     
     if (!res.ok) {
