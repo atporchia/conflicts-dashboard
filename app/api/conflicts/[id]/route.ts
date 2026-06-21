@@ -5,10 +5,10 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const conflictId = params.id;
+    const { id: conflictId } = await params;
 
     // Fetch conflict
     const { data: conflict, error: conflictError } = await supabase
