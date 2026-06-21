@@ -54,17 +54,14 @@ export function ConflictMap({ conflicts }: ConflictMapProps) {
             fillOpacity: 0.8,
           }).addTo(map);
 
-          circle.bindPopup(`
-            <div class="p-2">
-              <h3 class="font-bold text-gray-900">${conflict.name}</h3>
-              <p class="text-sm text-gray-600">${conflict.type.replace('_', ' ')}</p>
-              <p class="text-xs text-gray-500 mt-1">Status: ${conflict.status}</p>
-              <p class="text-xs text-gray-500">Countries: ${conflict.countries_involved.join(', ')}</p>
-            </div>
-          `);
+          // Tooltip on hover
+          circle.bindTooltip(
+            `<strong>${conflict.name}</strong><br/>${conflict.type.replace(/_/g, ' ')}<br/>${conflict.countries_involved.join(', ')}`,
+            { sticky: true }
+          );
 
+          // Click to navigate
           circle.on('click', () => {
-            // Navigate to filter by first country
             if (conflict.countries_involved.length > 0) {
               window.location.href = `/?country=${encodeURIComponent(conflict.countries_involved[0])}`;
             }
