@@ -1,34 +1,24 @@
--- Run this in Supabase SQL Editor AFTER deploying the Edge Function
--- This schedules the ingest-news Edge Function to run every 30 minutes
+-- Schedule RSS ingestion every 4 hours
+-- Runs at 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC
 
--- Enable pg_cron extension (if not already enabled)
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-
--- Schedule the ingest-news function to run every 30 minutes
 SELECT cron.schedule(
-  'ingest-news-every-30-min',  -- job name
-  '*/30 * * * *',              -- every 30 minutes
+  'ingest-news',
+  '0 */4 * * *',
   $$
   SELECT net.http_post(
-    url := 'https://eemqlvewfqjrbxyouxuv.supabase.co/functions/v1/ingest-news',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key')
-    )
+    'https://eemqlvewfqjrbxyouxuv.supabase.co/functions/v1/ingest-news',
+    '{}'::jsonb,
+    '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVlbXFsdmV3ZnFqcmJ4eW91eHV2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTk2ODQ4MSwiZXhwIjoyMDk3NTQ0NDgxfQ.X7XKEOzIgAAAgJoUfD203qn8BzJCP2takp0WIsOJoHk"}'::jsonb
   ) AS request_id;
   $$
 );
 
--- Also schedule a daily cleanup job (runs at 2 AM every Sunday)
+-- Clean up old news articles weekly (keep last 90 days)
 SELECT cron.schedule(
-  'cleanup-old-news-weekly',
-  '0 2 * * 0',
+  'cleanup-old-news',
+  '0 2 * * 0',  -- Every Sunday at 2 AM
   $$
-  DELETE FROM news_items
-  WHERE published_at < NOW() - INTERVAL '30 days'
-  AND conflict_id IS NULL;  -- only remove unmatched news
+  DELETE FROM news_items 
+  WHERE published_at < NOW() - INTERVAL '90 days';
   $$
 );
-
--- View scheduled jobs
-SELECT * FROM cron.job;

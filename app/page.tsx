@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { ConflictMap } from '@/components/map/conflict-map';
 import { StatsOverview } from '@/components/dashboard/stats-overview';
 import { RecentUpdates } from '@/components/dashboard/recent-updates';
+import { CountryFilter } from '@/components/dashboard/country-filter';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,67 +111,44 @@ export default async function Home({
 
       {/* Country Filter Section - Always visible */}
       <div className="mt-8">
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-white">
-              {selectedCountry ? `Filtered by: ${selectedCountry}` : 'Filter by Country'}
-            </h2>
-            {selectedCountry && (
-              <a 
-                href="/"
-                className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Reset Filter
-              </a>
-            )}
-          </div>
-          
-          {/* Country chips */}
-          <div className="flex flex-wrap gap-2">
-            <a
-              href="/"
-              className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                !selectedCountry 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-              }`}
-            >
-              All Countries
-            </a>
-            {allCountries.map((country) => (
-              <a
-                key={country}
-                href={`/?country=${encodeURIComponent(country)}`}
-                className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                  selectedCountry === country
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                }`}
-              >
-                {country}
-              </a>
-            ))}
-          </div>
+        <Suspense fallback={<div className="text-gray-500">Loading filter...</div>}>
+          <CountryFilter 
+            allCountries={allCountries}
+            selectedCountry={selectedCountry}
+          />
+        </Suspense>
+      </div>
 
-          {selectedCountry && (
-            <p className="text-gray-400 text-sm mt-4">
+      {/* Articles Section - Shows when country is selected */}
+      {selectedCountry && (
+        <div className="mt-8">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <h2 className="text-xl font-semibold text-white mb-4">
+              Articles for {selectedCountry}
+            </h2>
+            <p className="text-gray-400 text-sm mb-4">
               Showing {(newsData.data || []).length} articles related to conflicts in {selectedCountry}.
             </p>
-          )}
+            <Suspense fallback={<div className="text-gray-500">Loading articles...</div>}>
+              <RecentUpdates news={newsData.data || []} />
+            </Suspense>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Recent Updates Section */}
-      <div className="mt-8">
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-white mb-4">
-            {selectedCountry ? `Articles for ${selectedCountry}` : 'Recent Updates'}
-          </h2>
-          <Suspense fallback={<div className="text-gray-500">Loading updates...</div>}>
-            <RecentUpdates news={newsData.data || []} />
-          </Suspense>
+      {/* Recent Updates Section - Shows when no country selected */}
+      {!selectedCountry && (
+        <div className="mt-8">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <h2 className="text-xl font-semibold text-white mb-4">
+              Recent Updates
+            </h2>
+            <Suspense fallback={<div className="text-gray-500">Loading updates...</div>}>
+              <RecentUpdates news={newsData.data || []} />
+            </Suspense>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

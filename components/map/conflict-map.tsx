@@ -67,8 +67,8 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
 
           circle.on('click', () => {
             // Clicking a marker selects the first country
-            if (conflict.countries_involved.length > 0) {
-              onCountrySelect?.(conflict.countries_involved[0]);
+            if (conflict.countries_involved.length > 0 && onCountrySelect) {
+              onCountrySelect(conflict.countries_involved[0]);
             }
           });
         }
