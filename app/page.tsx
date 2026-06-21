@@ -2,7 +2,6 @@ import { Suspense } from 'react';
 import { ConflictMap } from '@/components/map/conflict-map';
 import { StatsOverview } from '@/components/dashboard/stats-overview';
 import { RecentUpdates } from '@/components/dashboard/recent-updates';
-import { CountryFilter } from '@/components/dashboard/country-filter';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,15 +54,6 @@ export default async function Home({
   const selectedCountry = searchParams.country || null;
   const newsData = await getNews(selectedCountry || undefined);
 
-  // Get unique countries from conflicts for filter chips
-  const countriesSet = new Set<string>();
-  conflictsData.data.forEach((c: any) => {
-    if (c.countries_involved) {
-      c.countries_involved.forEach((country: string) => countriesSet.add(country));
-    }
-  });
-  const allCountries = Array.from(countriesSet).sort();
-
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -82,6 +72,9 @@ export default async function Home({
             <h2 className="text-xl font-semibold text-white mb-4">
               Global Conflict Map
             </h2>
+            <p className="text-gray-400 text-sm mb-4">
+              Click on a colored marker to view related articles
+            </p>
             <div className="aspect-video rounded-lg overflow-hidden">
               <Suspense fallback={<div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-500">Loading map...</div>}>
                 <ConflictMap conflicts={conflictsData.data} />
@@ -106,41 +99,25 @@ export default async function Home({
         </div>
       </div>
 
-      {/* Country Filter Section - Always visible */}
-      <div className="mt-8">
-        <Suspense fallback={<div className="text-gray-500">Loading filter...</div>}>
-          <CountryFilter 
-            allCountries={allCountries}
-            selectedCountry={selectedCountry}
-          />
-        </Suspense>
-      </div>
-
-      {/* Articles Section - Shows when country is selected */}
+      {/* Articles Section - ONLY shows when country is selected */}
       {selectedCountry && (
         <div className="mt-8">
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-white mb-4">
-              Articles for {selectedCountry}
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-white">
+                Articles for {selectedCountry}
+              </h2>
+              <a 
+                href="/"
+                className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                ← Back to all
+              </a>
+            </div>
             <p className="text-gray-400 text-sm mb-4">
               Showing {(newsData.data || []).length} articles related to conflicts in {selectedCountry}.
             </p>
             <Suspense fallback={<div className="text-gray-500">Loading articles...</div>}>
-              <RecentUpdates news={newsData.data || []} />
-            </Suspense>
-          </div>
-        </div>
-      )}
-
-      {/* Recent Updates Section - Shows when no country selected */}
-      {!selectedCountry && (
-        <div className="mt-8">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-white mb-4">
-              Recent Updates
-            </h2>
-            <Suspense fallback={<div className="text-gray-500">Loading updates...</div>}>
               <RecentUpdates news={newsData.data || []} />
             </Suspense>
           </div>
