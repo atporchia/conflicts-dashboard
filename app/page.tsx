@@ -1,4 +1,3 @@
-import { Suspense } from 'react';
 import { ConflictMap } from '@/components/map/conflict-map';
 import { StatsOverview } from '@/components/dashboard/stats-overview';
 import { RecentUpdates } from '@/components/dashboard/recent-updates';
@@ -76,9 +75,7 @@ export default async function Home({
               Hover over markers for details. Click to filter articles by country.
             </p>
             <div className="aspect-video rounded-lg overflow-hidden">
-              <Suspense fallback={<div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-500">Loading map...</div>}>
-                <ConflictMap conflicts={conflictsData.data} />
-              </Suspense>
+              <ConflictMap conflicts={conflictsData.data} />
             </div>
           </div>
         </div>
@@ -89,12 +86,10 @@ export default async function Home({
             <h2 className="text-xl font-semibold text-white mb-4">
               Statistics
             </h2>
-            <Suspense fallback={<div className="text-gray-500">Loading statistics...</div>}>
-              <StatsOverview 
-                conflicts={conflictsData.data} 
-                selectedCountry={selectedCountry}
-              />
-            </Suspense>
+            <StatsOverview 
+              conflicts={conflictsData.data} 
+              selectedCountry={selectedCountry}
+            />
           </div>
         </div>
       </div>
@@ -117,9 +112,7 @@ export default async function Home({
             <p className="text-gray-400 text-sm mb-4">
               Showing {(newsData.data || []).length} articles
             </p>
-            <Suspense fallback={<div className="text-gray-500">Loading articles...</div>}>
-              <RecentUpdates news={newsData.data || []} />
-            </Suspense>
+            <RecentUpdates news={newsData.data || []} />
           </div>
         </div>
       )}
@@ -130,9 +123,7 @@ export default async function Home({
           <h2 className="text-xl font-semibold text-white mb-4">
             Recent Updates
           </h2>
-          <Suspense fallback={<div className="text-gray-500">Loading updates...</div>}>
-            <RecentUpdates news={newsData.data || []} />
-          </Suspense>
+          <RecentUpdates news={newsData.data || []} />
         </div>
       </div>
     </div>
