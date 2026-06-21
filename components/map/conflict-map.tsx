@@ -9,18 +9,43 @@ interface ConflictMapProps {
   selectedCountry?: string | null;
 }
 
+// Map GeoJSON country names to our database country names
+const COUNTRY_NAME_MAP: Record<string, string> = {
+  'Russian Federation': 'Russia',
+  'Syrian Arab Republic': 'Syria',
+  'Democratic Republic of the Congo': 'DRC',
+  'Republic of the Congo': 'Congo',
+  'Myanmar': 'Myanmar',
+  'Burma': 'Myanmar',
+  'United States': 'USA',
+  'United Kingdom': 'UK',
+  'Czech Republic': 'Czechia',
+  'Republic of Serbia': 'Serbia',
+  'Bosnia and Herzegovina': 'Bosnia',
+  'North Macedonia': 'Macedonia',
+  'Eswatini': 'Swaziland',
+  'Cabo Verde': 'Cape Verde',
+  'Timor-Leste': 'East Timor',
+};
+
+function normalizeCountryName(name: string): string {
+  return COUNTRY_NAME_MAP[name] || name;
+}
+
 export function ConflictMap({ conflicts, selectedCountry }: ConflictMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [geoJsonData, setGeoJsonData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Build a map of country -> conflicts for coloring
+  // Build a map of normalized country -> conflicts for coloring
   const countryConflicts = new Map<string, Conflict[]>();
   conflicts.forEach((conflict) => {
     conflict.countries_involved.forEach((country) => {
-      const existing = countryConflicts.get(country) || [];
+      const normalized = normalizeCountryName(country);
+      const existing = countryConflicts.get(normalized) || [];
       existing.push(conflict);
-      countryConflicts.set(country, existing);
+      countryConflicts.set(normalized, existing);
     });
   });
 
@@ -65,10 +90,13 @@ export function ConflictMap({ conflicts, selectedCountry }: ConflictMapProps) {
       // Fetch world GeoJSON
       try {
         const res = await fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson');
+        if (!res.ok) throw new Error('Failed to fetch GeoJSON');
         const data = await res.json();
         setGeoJsonData(data);
+        setError(null);
       } catch (e) {
         console.error('Failed to load GeoJSON', e);
+        setError('Failed to load map data');
       }
     }
 
@@ -97,40 +125,44 @@ export function ConflictMap({ conflicts, selectedCountry }: ConflictMapProps) {
     // Add country polygons
     const geoJsonLayer = L.geoJSON(geoJsonData, {
       style: (feature: any) => {
-        const countryName = feature.properties.ADMIN;
+        const rawName = feature.properties.ADMIN;
+        const countryName = normalizeCountryName(rawName);
         const conflicts = countryConflicts.get(countryName);
+        
         if (conflicts && conflicts.length > 0) {
           const types = conflicts.map((c: any) => c.type);
           return {
             fillColor: getColor(types),
-            weight: 1,
+            weight: 2,
             opacity: 1,
-            color: 'white',
-            fillOpacity: 0.6,
+            color: '#ffffff',
+            fillOpacity: 0.7,
           };
         }
         return {
-          fillColor: '#374151',
+          fillColor: '#1f2937',
           weight: 1,
-          opacity: 1,
-          color: '#4b5563',
+          opacity: 0.5,
+          color: '#374151',
           fillOpacity: 0.3,
         };
       },
       onEachFeature: (feature: any, layer: any) => {
-        const countryName = feature.properties.ADMIN;
+        const rawName = feature.properties.ADMIN;
+        const countryName = normalizeCountryName(rawName);
         const conflicts = countryConflicts.get(countryName);
 
         layer.on({
-          mouseover: () => {
+          mouseover: (e: any) => {
             if (conflicts && conflicts.length > 0) {
               const types = conflicts.map((c: any) => c.type.replace('_', ' ')).join(', ');
+              const names = conflicts.map((c: any) => c.name).join('; ');
               layer.bindTooltip(
-                `<strong>${countryName}</strong><br/>Active conflicts: ${conflicts.length}<br/>Types: ${types}`,
-                { sticky: true }
+                `<strong>${countryName}</strong><br/>${conflicts.length} active conflict(s)<br/>${types}<br/><em>${names}</em>`,
+                { sticky: true, maxWidth: 300 }
               ).openTooltip();
             } else {
-              layer.bindTooltip(`<strong>${countryName}</strong><br/>No active conflicts`).openTooltip();
+              layer.bindTooltip(`<strong>${countryName}</strong><br/>No active conflicts`, { sticky: true }).openTooltip();
             }
           },
           mouseout: () => {
@@ -157,6 +189,14 @@ export function ConflictMap({ conflicts, selectedCountry }: ConflictMapProps) {
       mapRef.current.fitBounds(bounds, { padding: [50, 50] });
     }
   }, [geoJsonData, conflicts]);
+
+  if (error) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gray-800 rounded-lg">
+        <p className="text-red-400">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div
