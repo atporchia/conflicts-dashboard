@@ -26,9 +26,8 @@ async function getConflicts() {
 async function getNews(country?: string) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    // Fetch more articles - up to 100
     const url = country 
-      ? `${baseUrl}/api/news?limit=100&conflict_id=${encodeURIComponent(country)}`
+      ? `${baseUrl}/api/news?limit=100&country=${encodeURIComponent(country)}`
       : `${baseUrl}/api/news?limit=100`;
     
     const res = await fetch(url, {
@@ -91,7 +90,10 @@ export default async function Home({
               Statistics
             </h2>
             <Suspense fallback={<div className="text-gray-500">Loading statistics...</div>}>
-              <StatsOverview conflicts={conflictsData.data} />
+              <StatsOverview 
+                conflicts={conflictsData.data} 
+                selectedCountry={selectedCountry || null}
+              />
             </Suspense>
           </div>
         </div>
