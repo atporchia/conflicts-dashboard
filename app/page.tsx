@@ -7,7 +7,7 @@ async function getConflicts() {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const res = await fetch(`${baseUrl}/api/conflicts?limit=50`, {
-      cache: 'no-store',
+      next: { revalidate: 60 },
     });
     
     if (!res.ok) {
@@ -25,7 +25,7 @@ async function getNews() {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const res = await fetch(`${baseUrl}/api/news?limit=10`, {
-      cache: 'no-store',
+      next: { revalidate: 60 },
     });
     
     if (!res.ok) {
