@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const conflictId = searchParams.get('conflict_id');
-    const source = searchParams.get('source');
+    const country = searchParams.get('country');
 
     let query = supabase
       .from('news_items')
@@ -18,10 +18,20 @@ export async function GET(request: Request) {
 
     if (conflictId) {
       query = query.eq('conflict_id', conflictId);
-    }
-
-    if (source) {
-      query = query.eq('source', source);
+    } else if (country) {
+      // Join with conflicts to filter by country
+      const { data: conflicts } = await supabase
+        .from('conflicts')
+        .select('id')
+        .contains('countries_involved', [country]);
+      
+      if (conflicts && conflicts.length > 0) {
+        const conflictIds = conflicts.map((c: any) => c.id);
+        query = query.in('conflict_id', conflictIds);
+      } else {
+        // No conflicts in this country, return empty
+        return Response.json({ data: [], meta: { total: 0, page, limit, has_more: false } });
+      }
     }
 
     query = query.order('published_at', { ascending: false });

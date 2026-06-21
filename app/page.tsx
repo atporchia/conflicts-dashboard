@@ -23,10 +23,15 @@ async function getConflicts() {
   }
 }
 
-async function getNews() {
+async function getNews(country?: string) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const res = await fetch(`${baseUrl}/api/news?limit=10`, {
+    // Fetch more articles - up to 100
+    const url = country 
+      ? `${baseUrl}/api/news?limit=100&conflict_id=${encodeURIComponent(country)}`
+      : `${baseUrl}/api/news?limit=100`;
+    
+    const res = await fetch(url, {
       cache: 'no-store',
     });
     
@@ -41,9 +46,14 @@ async function getNews() {
   }
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: { country?: string };
+}) {
   const conflictsData = await getConflicts();
-  const newsData = await getNews();
+  const selectedCountry = searchParams.country;
+  const newsData = await getNews(selectedCountry);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -67,6 +77,7 @@ export default async function Home() {
               <Suspense fallback={<div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-500">Loading map...</div>}>
                 <ConflictMap 
                   conflicts={conflictsData.data} 
+                  selectedCountry={selectedCountry || null}
                 />
               </Suspense>
             </div>
@@ -86,11 +97,33 @@ export default async function Home() {
         </div>
       </div>
 
+      {/* Country Filter Section */}
+      {selectedCountry && (
+        <div className="mt-8">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-white">
+                Filtered by: {selectedCountry}
+              </h2>
+              <a 
+                href="/"
+                className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Reset Filter
+              </a>
+            </div>
+            <p className="text-gray-400 text-sm">
+              Showing {newsData.data.length} articles related to conflicts in {selectedCountry}.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Recent Updates Section */}
       <div className="mt-8">
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
           <h2 className="text-xl font-semibold text-white mb-4">
-            Recent Updates
+            {selectedCountry ? `Articles for ${selectedCountry}` : 'Recent Updates'}
           </h2>
           <Suspense fallback={<div className="text-gray-500">Loading updates...</div>}>
             <RecentUpdates news={newsData.data} />

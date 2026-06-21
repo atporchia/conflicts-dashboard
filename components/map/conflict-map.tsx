@@ -1,24 +1,46 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
 import type { Conflict } from '@/lib/types';
 
 interface ConflictMapProps {
   conflicts: Conflict[];
-  onConflictSelect?: (conflict: Conflict) => void;
-  selectedConflictId?: string;
+  selectedCountry?: string | null;
 }
 
-export function ConflictMap({ conflicts, onConflictSelect, selectedConflictId }: ConflictMapProps) {
-  const mapRef = useRef<any>(null);
+export function ConflictMap({ conflicts, selectedCountry }: ConflictMapProps) {
+  const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const [geoJsonData, setGeoJsonData] = useState<any>(null);
+
+  // Build a map of country -> conflicts for coloring
+  const countryConflicts = new Map<string, Conflict[]>();
+  conflicts.forEach((conflict) => {
+    conflict.countries_involved.forEach((country) => {
+      const existing = countryConflicts.get(country) || [];
+      existing.push(conflict);
+      countryConflicts.set(country, existing);
+    });
+  });
+
+  // Color by conflict type
+  function getColor(types: Conflict['type'][]): string {
+    const hasType = (type: Conflict['type']) => types.some((t) => t === type);
+    if (hasType('interstate')) return '#ef4444'; // red
+    if (hasType('civil_war')) return '#f97316'; // orange
+    if (hasType('insurgency')) return '#eab308'; // yellow
+    if (hasType('terrorism')) return '#a855f7'; // purple
+    if (hasType('territorial_dispute')) return '#3b82f6'; // blue
+    return '#6b7280'; // gray
+  }
 
   useEffect(() => {
-    // Dynamically import Leaflet (avoids SSR window issues)
+    // Dynamically import Leaflet
     async function initMap() {
       const L = (await import('leaflet')).default;
 
-      // Fix for default marker icons in Leaflet
+      // Fix for default marker icons
       const DefaultIcon = L.icon({
         iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
         shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
@@ -27,12 +49,10 @@ export function ConflictMap({ conflicts, onConflictSelect, selectedConflictId }:
         popupAnchor: [1, -34],
         shadowSize: [41, 41],
       });
-
       L.Marker.prototype.options.icon = DefaultIcon;
 
       if (!mapContainerRef.current || mapRef.current) return;
 
-      // Initialize map
       const map = L.map(mapContainerRef.current).setView([20, 0], 2);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -41,6 +61,15 @@ export function ConflictMap({ conflicts, onConflictSelect, selectedConflictId }:
       }).addTo(map);
 
       mapRef.current = map;
+
+      // Fetch world GeoJSON
+      try {
+        const res = await fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson');
+        const data = await res.json();
+        setGeoJsonData(data);
+      } catch (e) {
+        console.error('Failed to load GeoJSON', e);
+      }
     }
 
     initMap();
@@ -54,46 +83,80 @@ export function ConflictMap({ conflicts, onConflictSelect, selectedConflictId }:
   }, []);
 
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !geoJsonData) return;
 
-    async function updateMarkers() {
-      const L = (await import('leaflet')).default;
-      const map = mapRef.current;
+    const L = require('leaflet');
 
-      // Clear existing markers
-      map.eachLayer((layer: any) => {
-        if (layer instanceof L.Marker) {
-          map.removeLayer(layer);
+    // Remove existing GeoJSON layers
+    mapRef.current.eachLayer((layer: any) => {
+      if (layer instanceof L.GeoJSON) {
+        mapRef.current?.removeLayer(layer);
+      }
+    });
+
+    // Add country polygons
+    const geoJsonLayer = L.geoJSON(geoJsonData, {
+      style: (feature: any) => {
+        const countryName = feature.properties.ADMIN;
+        const conflicts = countryConflicts.get(countryName);
+        if (conflicts && conflicts.length > 0) {
+          const types = conflicts.map((c: any) => c.type);
+          return {
+            fillColor: getColor(types),
+            weight: 1,
+            opacity: 1,
+            color: 'white',
+            fillOpacity: 0.6,
+          };
+        }
+        return {
+          fillColor: '#374151',
+          weight: 1,
+          opacity: 1,
+          color: '#4b5563',
+          fillOpacity: 0.3,
+        };
+      },
+      onEachFeature: (feature: any, layer: any) => {
+        const countryName = feature.properties.ADMIN;
+        const conflicts = countryConflicts.get(countryName);
+
+        layer.on({
+          mouseover: () => {
+            if (conflicts && conflicts.length > 0) {
+              const types = conflicts.map((c: any) => c.type.replace('_', ' ')).join(', ');
+              layer.bindTooltip(
+                `<strong>${countryName}</strong><br/>Active conflicts: ${conflicts.length}<br/>Types: ${types}`,
+                { sticky: true }
+              ).openTooltip();
+            } else {
+              layer.bindTooltip(`<strong>${countryName}</strong><br/>No active conflicts`).openTooltip();
+            }
+          },
+          mouseout: () => {
+            layer.closeTooltip();
+          },
+          click: () => {
+            if (conflicts && conflicts.length > 0) {
+              // Navigate to filtered view
+              window.location.href = `/?country=${encodeURIComponent(countryName)}`;
+            }
+          },
+        });
+      },
+    }).addTo(mapRef.current);
+
+    // Fit bounds if there are conflicts
+    if (conflicts.length > 0) {
+      const bounds = L.latLngBounds([]);
+      conflicts.forEach((c: any) => {
+        if (c.latitude && c.longitude) {
+          bounds.extend([c.latitude, c.longitude]);
         }
       });
-
-      // Add markers for conflicts
-      conflicts.forEach((conflict) => {
-        if (conflict.latitude && conflict.longitude) {
-          const marker = L.marker([conflict.latitude, conflict.longitude])
-            .addTo(map)
-            .bindPopup(`
-              <div class="p-2">
-                <h3 class="font-bold text-gray-900">${conflict.name}</h3>
-                <p class="text-sm text-gray-600">${conflict.type.replace('_', ' ')}</p>
-                <p class="text-xs text-gray-500 mt-1">Status: ${conflict.status}</p>
-              </div>
-            `);
-
-          marker.on('click', () => {
-            onConflictSelect?.(conflict);
-          });
-
-          // Highlight selected conflict
-          if (conflict.id === selectedConflictId) {
-            marker.openPopup();
-          }
-        }
-      });
+      mapRef.current.fitBounds(bounds, { padding: [50, 50] });
     }
-
-    updateMarkers();
-  }, [conflicts, onConflictSelect, selectedConflictId]);
+  }, [geoJsonData, conflicts]);
 
   return (
     <div
