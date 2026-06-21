@@ -31,17 +31,6 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
     async function initMap() {
       const L = (await import('leaflet')).default;
 
-      // Fix for default marker icons
-      const DefaultIcon = L.icon({
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowSize: [41, 41],
-      });
-      L.Marker.prototype.options.icon = DefaultIcon;
-
       if (!mapContainerRef.current || mapRef.current) return;
 
       const map = L.map(mapContainerRef.current).setView([20, 0], 2);
@@ -53,21 +42,30 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
 
       mapRef.current = map;
 
-      // Add markers for each conflict
+      // Add colored circle markers for each conflict
       conflicts.forEach((conflict) => {
         if (conflict.latitude && conflict.longitude) {
-          const marker = L.marker([conflict.latitude, conflict.longitude])
-            .addTo(map)
-            .bindPopup(`
-              <div class="p-2">
-                <h3 class="font-bold text-gray-900">${conflict.name}</h3>
-                <p class="text-sm text-gray-600">${conflict.type.replace('_', ' ')}</p>
-                <p class="text-xs text-gray-500 mt-1">Status: ${conflict.status}</p>
-                <p class="text-xs text-gray-500">Countries: ${conflict.countries_involved.join(', ')}</p>
-              </div>
-            `);
+          const color = getColor(conflict.type);
+          
+          const circle = L.circleMarker([conflict.latitude, conflict.longitude], {
+            radius: 10,
+            fillColor: color,
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8,
+          }).addTo(map);
 
-          marker.on('click', () => {
+          circle.bindPopup(`
+            <div class="p-2">
+              <h3 class="font-bold text-gray-900">${conflict.name}</h3>
+              <p class="text-sm text-gray-600">${conflict.type.replace('_', ' ')}</p>
+              <p class="text-xs text-gray-500 mt-1">Status: ${conflict.status}</p>
+              <p class="text-xs text-gray-500">Countries: ${conflict.countries_involved.join(', ')}</p>
+            </div>
+          `);
+
+          circle.on('click', () => {
             // Clicking a marker selects the first country
             if (conflict.countries_involved.length > 0) {
               onCountrySelect?.(conflict.countries_involved[0]);

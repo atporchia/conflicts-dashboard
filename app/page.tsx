@@ -51,8 +51,17 @@ export default async function Home({
   searchParams: { country?: string };
 }) {
   const conflictsData = await getConflicts();
-  const selectedCountry = searchParams.country;
-  const newsData = await getNews(selectedCountry);
+  const selectedCountry = searchParams.country || null;
+  const newsData = await getNews(selectedCountry || undefined);
+
+  // Get unique countries from conflicts for filter chips
+  const countriesSet = new Set<string>();
+  conflictsData.data.forEach((c: any) => {
+    if (c.countries_involved) {
+      c.countries_involved.forEach((country: string) => countriesSet.add(country));
+    }
+  });
+  const allCountries = Array.from(countriesSet).sort();
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -76,7 +85,7 @@ export default async function Home({
               <Suspense fallback={<div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-500">Loading map...</div>}>
                 <ConflictMap 
                   conflicts={conflictsData.data} 
-                  selectedCountry={selectedCountry || null}
+                  selectedCountry={selectedCountry}
                 />
               </Suspense>
             </div>
@@ -92,34 +101,64 @@ export default async function Home({
             <Suspense fallback={<div className="text-gray-500">Loading statistics...</div>}>
               <StatsOverview 
                 conflicts={conflictsData.data} 
-                selectedCountry={selectedCountry || null}
+                selectedCountry={selectedCountry}
               />
             </Suspense>
           </div>
         </div>
       </div>
 
-      {/* Country Filter Section */}
-      {selectedCountry && (
-        <div className="mt-8">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-white">
-                Filtered by: {selectedCountry}
-              </h2>
+      {/* Country Filter Section - Always visible */}
+      <div className="mt-8">
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-white">
+              {selectedCountry ? `Filtered by: ${selectedCountry}` : 'Filter by Country'}
+            </h2>
+            {selectedCountry && (
               <a 
                 href="/"
                 className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
               >
                 Reset Filter
               </a>
-            </div>
-            <p className="text-gray-400 text-sm">
-              Showing {newsData.data.length} articles related to conflicts in {selectedCountry}.
-            </p>
+            )}
           </div>
+          
+          {/* Country chips */}
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/"
+              className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                !selectedCountry 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              All Countries
+            </a>
+            {allCountries.map((country) => (
+              <a
+                key={country}
+                href={`/?country=${encodeURIComponent(country)}`}
+                className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                  selectedCountry === country
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                {country}
+              </a>
+            ))}
+          </div>
+
+          {selectedCountry && (
+            <p className="text-gray-400 text-sm mt-4">
+              Showing {(newsData.data || []).length} articles related to conflicts in {selectedCountry}.
+            </p>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Recent Updates Section */}
       <div className="mt-8">
@@ -128,7 +167,7 @@ export default async function Home({
             {selectedCountry ? `Articles for ${selectedCountry}` : 'Recent Updates'}
           </h2>
           <Suspense fallback={<div className="text-gray-500">Loading updates...</div>}>
-            <RecentUpdates news={newsData.data} />
+            <RecentUpdates news={newsData.data || []} />
           </Suspense>
         </div>
       </div>
