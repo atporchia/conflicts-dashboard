@@ -65,8 +65,10 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
         touchZoom: false,
         keyboard: false,
         dragging: false,
-        minZoom: 1,
-        maxZoom: 1,
+        zoomSnap: 0,
+        zoomDelta: 0,
+        minZoom: 0.5,
+        maxZoom: 3,
         worldCopyJump: false,
         maxBounds: [[-90, -210], [90, 210]],
         maxBoundsViscosity: 1.0,
@@ -81,7 +83,7 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
       mapRef.current = map;
       setTimeout(() => {
         map.invalidateSize();
-        map.fitBounds([[-75, -175], [80, 175]], { padding: [4, 4] });
+        map.fitBounds([[-58, -168], [80, 175]], { padding: [0, 0], animate: false });
       }, 150);
     }
 
