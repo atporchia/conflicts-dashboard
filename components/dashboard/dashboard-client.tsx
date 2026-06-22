@@ -26,7 +26,6 @@ export function DashboardClient({ selectedCountry }: DashboardClientProps) {
   const router = useRouter();
   const [conflicts, setConflicts] = useState([] as any[]);
   const [news, setNews] = useState([] as any[]);
-  const [ingesting, setIngesting] = useState(false);
 
   useEffect(() => {
     fetch('/api/conflicts?limit=50')
@@ -51,26 +50,6 @@ export function DashboardClient({ selectedCountry }: DashboardClientProps) {
     },
     [router]
   );
-
-  const handleRefreshNews = async () => {
-    setIngesting(true);
-    try {
-      const res = await fetch('/api/news/ingest', { method: 'POST' });
-      const result = await res.json();
-      if (result.inserted > 0) {
-        const url = selectedCountry
-          ? `/api/news?limit=100&country=${encodeURIComponent(selectedCountry)}`
-          : `/api/news?limit=100&exclude_frozen=true`;
-        const newsRes = await fetch(url);
-        const newsData = await newsRes.json();
-        setNews(newsData.data || []);
-      }
-    } catch {
-      // silently fail — news refresh is best-effort
-    } finally {
-      setIngesting(false);
-    }
-  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -122,16 +101,7 @@ export function DashboardClient({ selectedCountry }: DashboardClientProps) {
       {!selectedCountry && (
         <div className="mt-8">
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-white">Recent Updates</h2>
-              <button
-                onClick={handleRefreshNews}
-                disabled={ingesting}
-                className="px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              >
-                {ingesting ? 'Refreshing…' : 'Refresh News'}
-              </button>
-            </div>
+            <h2 className="text-xl font-semibold text-white mb-4">Recent Updates</h2>
             <RecentUpdates news={news} />
           </div>
         </div>
