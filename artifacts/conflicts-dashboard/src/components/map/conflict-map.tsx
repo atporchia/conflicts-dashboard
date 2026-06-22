@@ -63,22 +63,26 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
         scrollWheelZoom: false,
         doubleClickZoom: false,
         touchZoom: false,
-        dragging: true,
+        keyboard: false,
+        dragging: false,
         minZoom: 2,
         maxZoom: 2,
         worldCopyJump: false,
-        maxBounds: [[-90, -200], [90, 200]],
+        maxBounds: [[-85, -180], [85, 180]],
         maxBoundsViscosity: 1.0,
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap © CARTO',
         subdomains: 'abcd',
         maxZoom: 20,
       }).addTo(map);
 
       mapRef.current = map;
-      setTimeout(() => map.invalidateSize(), 100);
+      setTimeout(() => {
+        map.invalidateSize();
+        map.fitWorld({ padding: [2, 2] });
+      }, 150);
     }
 
     initMap();
@@ -130,16 +134,16 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
             const color = STATUS_COLORS[status] || '#f97316';
             return {
               fillColor: color,
-              fillOpacity: isSelected ? 0.9 : 0.65,
-              color: isSelected ? '#fff' : '#374151',
-              weight: isSelected ? 2 : 0.5,
+              fillOpacity: isSelected ? 0.95 : 0.78,
+              color: isSelected ? '#1e293b' : '#fff',
+              weight: isSelected ? 2 : 0.8,
             };
           }
           return {
-            fillColor: '#1f2937',
-            fillOpacity: 0.8,
-            color: '#374151',
-            weight: 0.5,
+            fillColor: '#d1d5db',
+            fillOpacity: 0.7,
+            color: '#9ca3af',
+            weight: 0.4,
           };
         },
         onEachFeature: (feature: any, featureLayer: any) => {
@@ -188,11 +192,11 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
   }, [conflicts, selectedCountry, onCountrySelect]);
 
   return (
-    <div className="relative w-full" style={{ height: '420px' }}>
-      <div ref={mapContainerRef} className="w-full h-full rounded-xl" />
+    <div className="relative w-full" style={{ height: 'clamp(340px, 52vw, 560px)' }}>
+      <div ref={mapContainerRef} className="w-full h-full rounded-xl overflow-hidden" />
       <div className="absolute bottom-3 left-3 flex flex-wrap gap-2 z-[1000]">
         {Object.entries(STATUS_COLORS).map(([status, color]) => (
-          <div key={status} className="flex items-center gap-1.5 bg-gray-900/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs text-gray-300 border border-gray-700">
+          <div key={status} className="flex items-center gap-1.5 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs text-gray-700 border border-gray-200 shadow-sm">
             <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
             {STATUS_LABELS[status]}
           </div>
