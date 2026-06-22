@@ -1,0 +1,2 @@
+- [GeoJSON property key](geojson-property-key.md) — local countries.geojson uses `name` not `ADMIN`; bundled in public/ for reliability
+- [Vite API proxy](vite-api-proxy.md) — frontend fetch('/api/*') requires Vite proxy config to reach the API server
