@@ -6,11 +6,12 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    
+
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const conflictId = searchParams.get('conflict_id');
     const country = searchParams.get('country');
+    const excludeFrozen = searchParams.get('exclude_frozen') === 'true';
 
     let query = supabase
       .from('news_items')
@@ -18,19 +19,26 @@ export async function GET(request: Request) {
 
     if (conflictId) {
       query = query.eq('conflict_id', conflictId);
-    } else if (country) {
-      // Join with conflicts to filter by country
-      const { data: conflicts } = await supabase
-        .from('conflicts')
-        .select('id')
-        .contains('countries_involved', [country]);
-      
-      if (conflicts && conflicts.length > 0) {
-        const conflictIds = conflicts.map((c: any) => c.id);
-        query = query.in('conflict_id', conflictIds);
-      } else {
-        // No conflicts in this country, return empty
-        return Response.json({ data: [], meta: { total: 0, page, limit, has_more: false } });
+    } else {
+      // Build the set of relevant conflict IDs
+      let conflictQuery = supabase.from('conflicts').select('id');
+
+      if (country) {
+        conflictQuery = conflictQuery.contains('countries_involved', [country]);
+      }
+      if (excludeFrozen) {
+        conflictQuery = conflictQuery.neq('status', 'frozen');
+      }
+
+      if (country || excludeFrozen) {
+        const { data: conflicts } = await conflictQuery;
+        if (conflicts && conflicts.length > 0) {
+          const conflictIds = conflicts.map((c: any) => c.id);
+          query = query.in('conflict_id', conflictIds);
+        } else if (country) {
+          // No conflicts matched this country — return empty
+          return Response.json({ data: [], meta: { total: 0, page, limit, has_more: false } });
+        }
       }
     }
 

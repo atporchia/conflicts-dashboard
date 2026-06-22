@@ -1,17 +1,18 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import L from 'leaflet';
+import { useEffect, useRef, useState } from 'react';
 import type { Conflict } from '@/lib/types';
 
 interface ConflictMapProps {
   conflicts: Conflict[];
+  onCountrySelect: (country: string) => void;
 }
 
-export function ConflictMap({ conflicts }: ConflictMapProps) {
-  const mapRef = useRef<L.Map | null>(null);
+export function ConflictMap({ conflicts, onCountrySelect }: ConflictMapProps) {
+  const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const markersRef = useRef<L.CircleMarker[]>([]);
+  const markersRef = useRef<any[]>([]);
+  const [mapReady, setMapReady] = useState(false);
 
   function getColor(type: Conflict['type']): string {
     switch (type) {
@@ -25,83 +26,93 @@ export function ConflictMap({ conflicts }: ConflictMapProps) {
   }
 
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
+    const container = mapContainerRef.current;
+    if (!container || mapRef.current) return;
 
-    const map = L.map(mapContainerRef.current, {
-      center: [20, 0],
-      zoom: 2,
-      zoomControl: true,
-    });
+    async function initMap() {
+      if (!container) return;
+      const L = (await import('leaflet')).default;
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 18,
-    }).addTo(map);
+      const map = L.map(container, {
+        center: [20, 0],
+        zoom: 2,
+        zoomControl: true,
+      });
 
-    mapRef.current = map;
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 18,
+      }).addTo(map);
 
-    // Force map to recalculate size after mount
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 100);
+      mapRef.current = map;
+      setMapReady(true);
+
+      setTimeout(() => map.invalidateSize(), 200);
+    }
+
+    initMap();
 
     return () => {
-      map.remove();
-      mapRef.current = null;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
   }, []);
 
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapReady || !mapRef.current) return;
 
-    const map = mapRef.current;
+    async function updateMarkers() {
+      const L = (await import('leaflet')).default;
+      const map = mapRef.current;
 
-    // Clear existing markers
-    markersRef.current.forEach((marker) => marker.remove());
-    markersRef.current = [];
+      markersRef.current.forEach((m: any) => m.remove());
+      markersRef.current = [];
 
-    // Add markers
-    conflicts.forEach((conflict) => {
-      if (conflict.latitude && conflict.longitude) {
-        const color = getColor(conflict.type);
-        
-        const marker = L.circleMarker([conflict.latitude, conflict.longitude], {
-          radius: 10,
-          fillColor: color,
-          color: '#fff',
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.8,
-        }).addTo(map);
+      conflicts.forEach((conflict) => {
+        if (conflict.latitude && conflict.longitude) {
+          const color = getColor(conflict.type);
 
-        marker.bindTooltip(
-          `<strong>${conflict.name}</strong><br/>${conflict.type.replace(/_/g, ' ')}<br/>${conflict.countries_involved.join(', ')}`,
-          { sticky: true }
-        );
+          const marker = L.circleMarker([conflict.latitude, conflict.longitude], {
+            radius: 10,
+            fillColor: color,
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8,
+          }).addTo(map);
 
-        marker.on('click', () => {
-          if (conflict.countries_involved.length > 0) {
-            window.location.href = `/?country=${encodeURIComponent(conflict.countries_involved[0])}`;
-          }
-        });
+          marker.bindTooltip(
+            `<strong>${conflict.name}</strong><br/>${conflict.type.replace(/_/g, ' ')}<br/>${conflict.countries_involved.join(', ')}`,
+            { sticky: true }
+          );
 
-        markersRef.current.push(marker);
-      }
-    });
+          marker.on('click', () => {
+            if (conflict.countries_involved.length > 0) {
+              onCountrySelect(conflict.countries_involved[0]);
+            }
+          });
 
-    // Fit bounds
-    if (conflicts.length > 0) {
-      const bounds = L.latLngBounds([]);
-      conflicts.forEach((c) => {
-        if (c.latitude && c.longitude) {
-          bounds.extend([c.latitude, c.longitude]);
+          markersRef.current.push(marker);
         }
       });
-      if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [50, 50] });
+
+      if (conflicts.length > 0) {
+        const bounds = L.latLngBounds([]);
+        conflicts.forEach((c: any) => {
+          if (c.latitude && c.longitude) {
+            bounds.extend([c.latitude, c.longitude]);
+          }
+        });
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [50, 50] });
+        }
       }
     }
-  }, [conflicts]);
+
+    updateMarkers();
+  }, [conflicts, mapReady, onCountrySelect]);
 
   return (
     <div

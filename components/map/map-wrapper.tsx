@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { Conflict } from '@/lib/types';
 
@@ -20,5 +21,11 @@ interface MapWrapperProps {
 }
 
 export function MapWrapper({ conflicts }: MapWrapperProps) {
-  return <ConflictMap conflicts={conflicts} />;
+  const router = useRouter();
+  return (
+    <ConflictMap
+      conflicts={conflicts}
+      onCountrySelect={(country) => router.push(`/?country=${encodeURIComponent(country)}`)}
+    />
+  );
 }
