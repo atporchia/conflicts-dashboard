@@ -1,11 +1,5 @@
 {
   "framework": "nextjs",
   "buildCommand": "next build",
-  "cleanUrls": true,
-  "crons": [
-    {
-      "path": "/api/news/ingest",
-      "schedule": "0 */3 * * *"
-    }
-  ]
+  "cleanUrls": true
 }

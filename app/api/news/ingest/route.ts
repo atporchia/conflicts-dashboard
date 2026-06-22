@@ -29,10 +29,21 @@ const ARMED_CONFLICT_KEYWORDS = [
 
 // Hardcoded reliable English RSS sources that complement the database sources.
 // Reuters and AP removed public RSS feeds in 2020 so the seed-data URLs are dead.
+// All URLs below verified live as of 2025-06.
 const BUILTIN_RSS_SOURCES = [
-  { name: 'The Guardian World',   url: 'https://www.theguardian.com/world/rss' },
-  { name: 'UN News Peace',        url: 'https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml' },
-  { name: 'ReliefWeb',            url: 'https://reliefweb.int/updates/rss.xml' },
+  // Global conflict reporting
+  { name: 'The Guardian World',     url: 'https://www.theguardian.com/world/rss' },
+  { name: 'Sky News World',         url: 'https://feeds.skynews.com/feeds/rss/world.xml' },
+  // Strong Africa + Sahel + Haiti coverage
+  { name: 'France 24 English',      url: 'https://www.france24.com/en/rss' },
+  { name: 'Deutsche Welle Africa',  url: 'https://rss.dw.com/rdf/rss-en-africa' },
+  { name: 'RFI English',            url: 'https://www.rfi.fr/en/rss' },
+  // Strong Middle East coverage (Gaza, Yemen, Syria)
+  { name: 'Middle East Eye',        url: 'https://www.middleeasteye.net/rss' },
+  // Humanitarian + analyst reports (Haiti, Sahel, Sudan)
+  { name: 'UN News Peace',          url: 'https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml' },
+  { name: 'ReliefWeb',              url: 'https://reliefweb.int/updates/rss.xml' },
+  { name: 'Crisis Group',           url: 'https://www.crisisgroup.org/rss.xml' },
 ];
 
 interface RssItem {
@@ -240,7 +251,18 @@ async function runIngest(): Promise<{ inserted: number; skipped: number; message
   };
 }
 
-export async function GET() {
+function isAuthorized(request: Request): boolean {
+  const secret = process.env.INGEST_SECRET;
+  // If no secret is configured, allow all (dev / initial setup)
+  if (!secret) return true;
+  return request.headers.get('x-ingest-secret') === secret;
+}
+
+// GET — called by GitHub Actions cron every 3 hours
+export async function GET(request: Request) {
+  if (!isAuthorized(request)) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const result = await runIngest();
     return Response.json(result);
@@ -249,7 +271,11 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+// POST — ad-hoc manual trigger
+export async function POST(request: Request) {
+  if (!isAuthorized(request)) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const result = await runIngest();
     return Response.json(result);
