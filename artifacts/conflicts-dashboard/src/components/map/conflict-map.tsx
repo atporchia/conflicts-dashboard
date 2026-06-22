@@ -21,115 +21,134 @@ const STATUS_LABELS: Record<string, string> = {
   frozen: 'Frozen',
 };
 
+const COUNTRY_ALIASES: Record<string, string[]> = {
+  'russia':                            ['russian federation'],
+  'myanmar':                           ['myanmar (burma)', 'burma'],
+  'palestine':                         ['west bank', 'gaza strip', 'palestinian territory', 'state of palestine'],
+  'south korea':                       ['republic of korea'],
+  'north korea':                       ["democratic people's republic of korea"],
+  'iran':                              ['islamic republic of iran'],
+  'syria':                             ['syrian arab republic'],
+  'tanzania':                          ['united republic of tanzania'],
+  'democratic republic of the congo':  ['drc', 'dr congo', 'congo (kinshasa)', 'congo, the democratic republic of the'],
+  'republic of the congo':             ['congo', 'congo (brazzaville)'],
+  "côte d'ivoire":                     ["ivory coast", "cote d'ivoire"],
+  'czechia':                           ['czech republic'],
+  'north macedonia':                   ['macedonia'],
+  'eswatini':                          ['swaziland'],
+  'cabo verde':                        ['cape verde'],
+  'türkiye':                           ['turkey'],
+  'united states of america':          ['united states', 'usa', 'us'],
+  'united kingdom':                    ['uk'],
+};
+
+function normalizeCountry(name: string): string[] {
+  const lower = name.toLowerCase();
+  const extras = COUNTRY_ALIASES[lower] || [];
+  const reverseExtras = Object.entries(COUNTRY_ALIASES)
+    .filter(([, aliases]) => aliases.includes(lower))
+    .map(([canonical]) => canonical);
+  return [lower, ...extras, ...reverseExtras];
+}
+
 function buildCountryConflictMap(conflicts: Conflict[]): Map<string, Conflict[]> {
   const map = new Map<string, Conflict[]>();
-  conflicts.forEach(c => {
-    c.countries_involved?.forEach(country => {
-      const existing = map.get(country.toLowerCase()) || [];
-      existing.push(c);
-      map.set(country.toLowerCase(), existing);
-    });
-  });
+  for (const c of conflicts) {
+    for (const country of c.countries_involved || []) {
+      for (const key of normalizeCountry(country)) {
+        const existing = map.get(key) || [];
+        existing.push(c);
+        map.set(key, existing);
+      }
+    }
+  }
   return map;
 }
 
-function getPriorityStatus(conflicts: Conflict[]): string {
-  const priority = ['escalating', 'ongoing', 'de-escalating', 'frozen'];
-  for (const p of priority) {
-    if (conflicts.some(c => c.status === p)) return p;
+function getPriorityStatus(cs: Conflict[]): string {
+  for (const p of ['escalating', 'ongoing', 'de-escalating', 'frozen']) {
+    if (cs.some(c => c.status === p)) return p;
   }
-  return conflicts[0]?.status || 'ongoing';
+  return cs[0]?.status || 'ongoing';
+}
+
+let cachedGeoData: any = null;
+
+async function loadGeoJson() {
+  if (cachedGeoData) return cachedGeoData;
+  const base = import.meta.env.BASE_URL || '/';
+  const url = base.replace(/\/$/, '') + '/countries.geojson';
+  const res = await fetch(url);
+  cachedGeoData = await res.json();
+  return cachedGeoData;
 }
 
 export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: ConflictMapProps) {
-  const mapRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
   const geoLayerRef = useRef<any>(null);
-  const initRef = useRef(false);
 
   useEffect(() => {
     const container = mapContainerRef.current;
-    if (!container || initRef.current) return;
-    initRef.current = true;
+    if (!container) return;
 
-    async function initMap() {
-      if (!container) return;
+    let cancelled = false;
+
+    async function init() {
       const L = (await import('leaflet')).default;
+      if (cancelled || !container) return;
 
-      const map = L.map(container, {
-        center: [20, 10],
-        zoom: 1,
-        zoomControl: false,
-        scrollWheelZoom: false,
-        doubleClickZoom: false,
-        touchZoom: false,
-        keyboard: false,
-        dragging: false,
-        zoomSnap: 0,
-        zoomDelta: 0,
-        minZoom: 0.5,
-        maxZoom: 3,
-        worldCopyJump: false,
-        maxBounds: [[-90, -210], [90, 210]],
-        maxBoundsViscosity: 1.0,
-      });
+      if (!mapRef.current) {
+        const map = L.map(container, {
+          center: [20, 10],
+          zoom: 1,
+          zoomControl: false,
+          scrollWheelZoom: false,
+          doubleClickZoom: false,
+          touchZoom: false,
+          keyboard: false,
+          dragging: false,
+          zoomSnap: 0,
+          zoomDelta: 0,
+          minZoom: 0.5,
+          maxZoom: 3,
+          worldCopyJump: false,
+          maxBounds: [[-90, -210], [90, 210]],
+          maxBoundsViscosity: 1.0,
+        });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap © CARTO',
-        subdomains: 'abcd',
-        maxZoom: 20,
-      }).addTo(map);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
+          attribution: '© OpenStreetMap © CARTO',
+          subdomains: 'abcd',
+          maxZoom: 20,
+        }).addTo(map);
 
-      mapRef.current = map;
-      setTimeout(() => {
-        map.invalidateSize();
-        map.fitBounds([[-58, -168], [80, 175]], { padding: [0, 0], animate: false });
-      }, 150);
-    }
-
-    initMap();
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-        initRef.current = false;
+        mapRef.current = map;
+        setTimeout(() => {
+          if (!cancelled && mapRef.current) {
+            mapRef.current.invalidateSize();
+            mapRef.current.fitBounds([[-58, -168], [80, 175]], { padding: [0, 0], animate: false });
+          }
+        }, 150);
       }
-    };
-  }, []);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    async function updateLayer() {
-      const L = (await import('leaflet')).default;
+      const map = mapRef.current;
+      const geoData = await loadGeoJson();
+      if (cancelled) return;
 
       if (geoLayerRef.current) {
         geoLayerRef.current.remove();
         geoLayerRef.current = null;
       }
 
-      let geoData: any;
-      try {
-        const res = await fetch(
-          'https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson'
-        );
-        geoData = await res.json();
-      } catch {
-        return;
-      }
-
       const countryConflicts = buildCountryConflictMap(conflicts);
 
       const layer = L.geoJSON(geoData, {
         style: (feature: any) => {
-          const name = feature?.properties?.ADMIN?.toLowerCase() || '';
-          const altName = feature?.properties?.NAME?.toLowerCase() || '';
-          const matched = countryConflicts.get(name) || countryConflicts.get(altName);
-          const isSelected =
-            selectedCountry &&
-            (name === selectedCountry.toLowerCase() || altName === selectedCountry.toLowerCase());
+          const name = (feature?.properties?.name || feature?.properties?.ADMIN || '').toLowerCase();
+          const matched = countryConflicts.get(name);
+          const isSelected = selectedCountry &&
+            name === selectedCountry.toLowerCase();
 
           if (matched) {
             const status = getPriorityStatus(matched);
@@ -137,7 +156,7 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
             return {
               fillColor: color,
               fillOpacity: isSelected ? 0.95 : 0.78,
-              color: isSelected ? '#1e293b' : '#fff',
+              color: '#fff',
               weight: isSelected ? 2 : 0.8,
             };
           }
@@ -149,11 +168,8 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
           };
         },
         onEachFeature: (feature: any, featureLayer: any) => {
-          const name = feature?.properties?.ADMIN || '';
-          const altName = feature?.properties?.NAME || '';
-          const matched =
-            countryConflicts.get(name.toLowerCase()) ||
-            countryConflicts.get(altName.toLowerCase());
+          const name = feature?.properties?.name || feature?.properties?.ADMIN || '';
+          const matched = countryConflicts.get(name.toLowerCase());
 
           if (matched) {
             const status = getPriorityStatus(matched);
@@ -173,15 +189,9 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
             );
 
             featureLayer.on({
-              mouseover: (e: any) => {
-                e.target.setStyle({ fillOpacity: 0.9, weight: 1.5, color: '#9ca3af' });
-              },
-              mouseout: (e: any) => {
-                layer.resetStyle(e.target);
-              },
-              click: () => {
-                onCountrySelect(name);
-              },
+              mouseover: (e: any) => e.target.setStyle({ fillOpacity: 0.95, weight: 1.5 }),
+              mouseout: () => layer.resetStyle(featureLayer),
+              click: () => onCountrySelect(name),
             });
           }
         },
@@ -190,8 +200,21 @@ export function ConflictMap({ conflicts, onCountrySelect, selectedCountry }: Con
       geoLayerRef.current = layer;
     }
 
-    updateLayer();
+    init().catch(console.error);
+
+    return () => {
+      cancelled = true;
+    };
   }, [conflicts, selectedCountry, onCountrySelect]);
+
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div className="relative w-full" style={{ height: 'clamp(340px, 52vw, 560px)' }}>
