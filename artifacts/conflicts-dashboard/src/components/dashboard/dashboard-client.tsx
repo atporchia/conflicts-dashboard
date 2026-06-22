@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
+import { useLocation } from 'wouter';
 import { ConflictStats } from '@/components/dashboard/conflict-stats';
 import { RecentUpdates } from '@/components/dashboard/recent-updates';
 import { ConflictDrawer } from '@/components/dashboard/conflict-drawer';
@@ -28,14 +29,19 @@ interface DashboardClientProps {
   selectedCountry: string | null;
 }
 
-export function DashboardClient({ selectedCountry: _selectedCountry }: DashboardClientProps) {
+export function DashboardClient({ selectedCountry }: DashboardClientProps) {
+  const [, setLocation] = useLocation();
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
-  const [drawerCountry, setDrawerCountry] = useState<string | null>(null);
+  const [drawerCountry, setDrawerCountry] = useState<string | null>(selectedCountry);
   const [drawerNews, setDrawerNews] = useState<any[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    setDrawerCountry(selectedCountry);
+  }, [selectedCountry]);
 
   const loadMain = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
@@ -62,23 +68,22 @@ export function DashboardClient({ selectedCountry: _selectedCountry }: Dashboard
 
   const handleCountrySelect = useCallback((country: string) => {
     setDrawerCountry(country);
-  }, []);
+    setLocation(`/?country=${encodeURIComponent(country)}`);
+  }, [setLocation]);
 
   const handleCloseDrawer = useCallback(() => {
     setDrawerCountry(null);
-  }, []);
+    setLocation('/');
+  }, [setLocation]);
 
   function formatLastUpdated(d: Date) {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col">
-      <div className="px-4 pt-5 pb-3 flex items-center justify-between border-b border-gray-800/60">
-        <div>
-          <h1 className="text-lg sm:text-xl font-bold text-white leading-tight">Global Conflict Dashboard</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Live visualization of armed conflicts worldwide</p>
-        </div>
+    <div className="flex-1 flex flex-col">
+      <div className="px-4 py-2 flex items-center justify-between border-b border-gray-800/40 bg-gray-950/80">
+        <p className="text-xs text-gray-500">Live visualization of armed conflicts worldwide</p>
         <div className="flex items-center gap-3">
           {lastUpdated && (
             <span className="text-xs text-gray-600 hidden sm:block">
@@ -135,8 +140,8 @@ export function DashboardClient({ selectedCountry: _selectedCountry }: Dashboard
           <ConflictStats
             conflicts={conflicts}
             news={news}
-            selectedCountry={null}
-            onClearCountry={() => {}}
+            selectedCountry={drawerCountry}
+            onClearCountry={handleCloseDrawer}
           />
         </div>
       </div>
