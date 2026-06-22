@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
-import { useLocation } from 'wouter';
 import { ConflictStats } from '@/components/dashboard/conflict-stats';
 import { RecentUpdates } from '@/components/dashboard/recent-updates';
+import { ConflictDrawer } from '@/components/dashboard/conflict-drawer';
 
 const ConflictMap = lazy(() =>
   import('@/components/map/conflict-map').then(m => ({ default: m.ConflictMap }))
@@ -11,10 +11,11 @@ interface DashboardClientProps {
   selectedCountry: string | null;
 }
 
-export function DashboardClient({ selectedCountry }: DashboardClientProps) {
-  const [, setLocation] = useLocation();
+export function DashboardClient({ selectedCountry: _selectedCountry }: DashboardClientProps) {
   const [conflicts, setConflicts] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
+  const [drawerCountry, setDrawerCountry] = useState<string | null>(null);
+  const [drawerNews, setDrawerNews] = useState<any[]>([]);
 
   useEffect(() => {
     fetch('/api/conflicts?limit=100')
@@ -24,25 +25,27 @@ export function DashboardClient({ selectedCountry }: DashboardClientProps) {
   }, []);
 
   useEffect(() => {
-    const url = selectedCountry
-      ? `/api/news?limit=20&country=${encodeURIComponent(selectedCountry)}`
-      : `/api/news?limit=20&exclude_frozen=true`;
-    fetch(url)
+    fetch('/api/news?limit=20&exclude_frozen=true')
       .then(r => r.json())
       .then(d => setNews(d.data || []))
       .catch(() => setNews([]));
-  }, [selectedCountry]);
+  }, []);
 
-  const handleCountrySelect = useCallback(
-    (country: string) => {
-      setLocation(`/?country=${encodeURIComponent(country)}`);
-    },
-    [setLocation]
-  );
+  useEffect(() => {
+    if (!drawerCountry) { setDrawerNews([]); return; }
+    fetch(`/api/news?limit=10&country=${encodeURIComponent(drawerCountry)}`)
+      .then(r => r.json())
+      .then(d => setDrawerNews(d.data || []))
+      .catch(() => setDrawerNews([]));
+  }, [drawerCountry]);
 
-  const handleClearCountry = useCallback(() => {
-    setLocation('/');
-  }, [setLocation]);
+  const handleCountrySelect = useCallback((country: string) => {
+    setDrawerCountry(country);
+  }, []);
+
+  const handleCloseDrawer = useCallback(() => {
+    setDrawerCountry(null);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col">
@@ -68,26 +71,14 @@ export function DashboardClient({ selectedCountry }: DashboardClientProps) {
               <ConflictMap
                 conflicts={conflicts}
                 onCountrySelect={handleCountrySelect}
-                selectedCountry={selectedCountry}
+                selectedCountry={drawerCountry}
               />
             </Suspense>
           </div>
 
           <div className="px-4 pb-4 flex-1">
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 h-full">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-white">
-                  {selectedCountry ? `${selectedCountry} — Recent News` : 'Recent Updates'}
-                </h2>
-                {selectedCountry && (
-                  <button
-                    onClick={handleClearCountry}
-                    className="text-xs text-gray-400 hover:text-white transition-colors"
-                  >
-                    ← All conflicts
-                  </button>
-                )}
-              </div>
+              <h2 className="text-sm font-semibold text-white mb-3">Recent Updates</h2>
               <RecentUpdates news={news} />
             </div>
           </div>
@@ -97,11 +88,18 @@ export function DashboardClient({ selectedCountry }: DashboardClientProps) {
           <ConflictStats
             conflicts={conflicts}
             news={news}
-            selectedCountry={selectedCountry}
-            onClearCountry={handleClearCountry}
+            selectedCountry={null}
+            onClearCountry={() => {}}
           />
         </div>
       </div>
+
+      <ConflictDrawer
+        country={drawerCountry}
+        conflicts={conflicts}
+        news={drawerNews}
+        onClose={handleCloseDrawer}
+      />
     </div>
   );
 }
