@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useLocation } from 'wouter';
-import { StatsOverview } from '@/components/dashboard/stats-overview';
+import { ConflictStats } from '@/components/dashboard/conflict-stats';
 import { RecentUpdates } from '@/components/dashboard/recent-updates';
 
 const ConflictMap = lazy(() =>
@@ -13,11 +13,11 @@ interface DashboardClientProps {
 
 export function DashboardClient({ selectedCountry }: DashboardClientProps) {
   const [, setLocation] = useLocation();
-  const [conflicts, setConflicts] = useState([] as any[]);
-  const [news, setNews] = useState([] as any[]);
+  const [conflicts, setConflicts] = useState<any[]>([]);
+  const [news, setNews] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch('/api/conflicts?limit=50')
+    fetch('/api/conflicts?limit=100')
       .then(r => r.json())
       .then(d => setConflicts(d.data || []))
       .catch(() => setConflicts([]));
@@ -25,8 +25,8 @@ export function DashboardClient({ selectedCountry }: DashboardClientProps) {
 
   useEffect(() => {
     const url = selectedCountry
-      ? `/api/news?limit=100&country=${encodeURIComponent(selectedCountry)}`
-      : `/api/news?limit=100&exclude_frozen=true`;
+      ? `/api/news?limit=20&country=${encodeURIComponent(selectedCountry)}`
+      : `/api/news?limit=20&exclude_frozen=true`;
     fetch(url)
       .then(r => r.json())
       .then(d => setNews(d.data || []))
@@ -40,67 +40,68 @@ export function DashboardClient({ selectedCountry }: DashboardClientProps) {
     [setLocation]
   );
 
+  const handleClearCountry = useCallback(() => {
+    setLocation('/');
+  }, [setLocation]);
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-white mb-2">Global Conflict Dashboard</h1>
-        <p className="text-gray-400">Real-time visualization of active armed conflicts worldwide</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-white mb-4">Global Conflict Map</h2>
-            <p className="text-gray-400 text-sm mb-4">
-              Hover over markers for details. Click to filter articles by country.
-            </p>
-            <div className="aspect-video rounded-lg overflow-hidden">
-              <Suspense fallback={
-                <div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-500">
-                  Loading map...
-                </div>
-              }>
-                <ConflictMap conflicts={conflicts} onCountrySelect={handleCountrySelect} />
-              </Suspense>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gray-950 flex flex-col">
+      <div className="px-4 pt-5 pb-3 flex items-center justify-between border-b border-gray-800/60">
+        <div>
+          <h1 className="text-lg sm:text-xl font-bold text-white leading-tight">Global Conflict Dashboard</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Live visualization of armed conflicts worldwide</p>
         </div>
-        <div className="lg:col-span-1">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-white mb-4">Statistics</h2>
-            <StatsOverview conflicts={conflicts} selectedCountry={selectedCountry} />
-          </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">{conflicts.length} conflicts tracked</span>
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
         </div>
       </div>
 
-      {selectedCountry && (
-        <div className="mt-8">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-white">
-                {selectedCountry} Related Articles
-              </h2>
-              <a
-                href="/"
-                className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                ← Back
-              </a>
-            </div>
-            <p className="text-gray-400 text-sm mb-4">Showing {news.length} articles</p>
-            <RecentUpdates news={news} />
+      <div className="flex-1 flex flex-col lg:flex-row gap-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="p-4">
+            <Suspense fallback={
+              <div className="w-full bg-gray-900 rounded-xl flex items-center justify-center text-gray-500 text-sm" style={{ height: '420px' }}>
+                Loading map…
+              </div>
+            }>
+              <ConflictMap
+                conflicts={conflicts}
+                onCountrySelect={handleCountrySelect}
+                selectedCountry={selectedCountry}
+              />
+            </Suspense>
           </div>
-        </div>
-      )}
 
-      {!selectedCountry && (
-        <div className="mt-8">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-white mb-4">Recent Updates</h2>
-            <RecentUpdates news={news} />
+          <div className="px-4 pb-4 flex-1">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 h-full">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-white">
+                  {selectedCountry ? `${selectedCountry} — Recent News` : 'Recent Updates'}
+                </h2>
+                {selectedCountry && (
+                  <button
+                    onClick={handleClearCountry}
+                    className="text-xs text-gray-400 hover:text-white transition-colors"
+                  >
+                    ← All conflicts
+                  </button>
+                )}
+              </div>
+              <RecentUpdates news={news} />
+            </div>
           </div>
         </div>
-      )}
+
+        <div className="lg:w-72 xl:w-80 border-t lg:border-t-0 lg:border-l border-gray-800/60 p-4 overflow-y-auto">
+          <ConflictStats
+            conflicts={conflicts}
+            news={news}
+            selectedCountry={selectedCountry}
+            onClearCountry={handleClearCountry}
+          />
+        </div>
+      </div>
     </div>
   );
 }
