@@ -1,0 +1,48 @@
+import { Link } from 'wouter';
+import { cn } from '@/lib/utils/cn';
+
+interface HeaderProps {
+  className?: string;
+}
+
+export function Header({ className }: HeaderProps) {
+  return (
+    <header className={cn('border-b border-gray-800 bg-gray-950', className)}>
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <h1 className="text-2xl font-bold text-white">
+              Global Conflict Dashboard
+            </h1>
+          </div>
+          <nav className="flex items-center space-x-6">
+            <Link
+              href="/"
+              className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
+            >
+              Dashboard
+            </Link>
+            <Link
+              href="/conflicts"
+              className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
+            >
+              Conflicts
+            </Link>
+            <Link
+              href="/news"
+              className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
+            >
+              News
+            </Link>
+            <Link
+              href="/about"
+              className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
+            >
+              About
+            </Link>
+          </nav>
+        </div>
+      </div>
+    </header>
+  );
+}

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Global Conflict Dashboard"
+version = "1.0.0"
+id = "artifacts/conflicts-dashboard"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24605
+
+[services.development]
+run = "pnpm --filter @workspace/conflicts-dashboard run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/conflicts-dashboard", "run", "build" ]
+publicDir = "artifacts/conflicts-dashboard/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24605"
+BASE_PATH = "/"
