@@ -1,6 +1,7 @@
-import { ConflictMap } from '@/components/map/conflict-map';
+import { Suspense } from 'react';
 import { StatsOverview } from '@/components/dashboard/stats-overview';
 import { RecentUpdates } from '@/components/dashboard/recent-updates';
+import { MapWrapper } from '@/components/map/map-wrapper';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,7 +76,9 @@ export default async function Home({
               Hover over markers for details. Click to filter articles by country.
             </p>
             <div className="aspect-video rounded-lg overflow-hidden">
-              <ConflictMap conflicts={conflictsData.data} />
+              <Suspense fallback={<div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-500">Loading map...</div>}>
+                <MapWrapper conflicts={conflictsData.data} />
+              </Suspense>
             </div>
           </div>
         </div>
