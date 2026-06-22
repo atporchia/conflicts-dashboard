@@ -14,7 +14,7 @@ const CONFLICT_TYPE_WORDS = new Set([
   'violence', 'gang', 'crisis', 'tension', 'unrest',
 ]);
 
-// Keywords that indicate an article is genuinely about armed conflict (not just politics)
+// Keywords that indicate an article is genuinely about armed conflict
 const ARMED_CONFLICT_KEYWORDS = [
   'killed', 'wounded', 'casualties', 'dead', 'deaths',
   'attack', 'attacked', 'airstrike', 'bombing', 'bomb', 'explosion',
@@ -24,6 +24,15 @@ const ARMED_CONFLICT_KEYWORDS = [
   'rebel', 'insurgent', 'militant', 'jihadist',
   'missile', 'rocket', 'artillery', 'drone strike',
   'invasion', 'occupation', 'siege',
+  'gunmen', 'armed group', 'massacre', 'shelling',
+];
+
+// Hardcoded reliable English RSS sources that complement the database sources.
+// Reuters and AP removed public RSS feeds in 2020 so the seed-data URLs are dead.
+const BUILTIN_RSS_SOURCES = [
+  { name: 'The Guardian World',   url: 'https://www.theguardian.com/world/rss' },
+  { name: 'UN News Peace',        url: 'https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml' },
+  { name: 'ReliefWeb',            url: 'https://reliefweb.int/updates/rss.xml' },
 ];
 
 interface RssItem {
@@ -40,24 +49,25 @@ interface ConflictRow {
   countries_involved: string[];
 }
 
-// Build a targeted GDELT query using the WAR_CONFLICT theme tag plus
-// the most specific geographic identifiers from the conflict name and countries.
+// Build a targeted GDELT query.
+// - theme:WAR_CONFLICT: GDELT's own classifier — only conflict-tagged articles
+// - sourcelang:english: English articles only — eliminates German/Spanish results
+// - Geographic terms extracted from the conflict name + country list
 function buildGdeltQuery(conflict: ConflictRow): string {
-  // Pull meaningful words from the conflict name (drop generic conflict-type words)
   const nameTerms = conflict.name
     .split(/[-\s]+/)
     .filter(w => w.length > 3 && !CONFLICT_TYPE_WORDS.has(w.toLowerCase()))
     .map(w => `"${w}"`);
 
-  // For multi-country conflicts (e.g. Sahel with Mali/Burkina Faso/Niger) the
-  // countries are more searchable than the region name alone — include both.
+  // Include country names for multi-country conflicts (e.g. Sahel needs
+  // "Mali" OR "Burkina Faso" OR "Niger" because "Sahel" alone is sparse)
   const countryTerms =
     conflict.countries_involved.length > 1
       ? conflict.countries_involved.map(c => `"${c}"`)
       : [];
 
   const allTerms = [...new Set([...nameTerms, ...countryTerms])];
-  return `theme:WAR_CONFLICT (${allTerms.join(' OR ')})`;
+  return `theme:WAR_CONFLICT sourcelang:english (${allTerms.join(' OR ')})`;
 }
 
 async function fetchRss(url: string): Promise<RssItem[]> {
@@ -78,8 +88,10 @@ async function fetchRss(url: string): Promise<RssItem[]> {
   }));
 }
 
+// timespan=7d: only return articles from the last 7 days — keeps results current.
+// Deduplication on URL prevents re-inserting on each cron run.
 async function fetchGdelt(query: string, maxRecords = 25): Promise<RssItem[]> {
-  const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=artlist&maxrecords=${maxRecords}&format=json`;
+  const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=artlist&maxrecords=${maxRecords}&timespan=7d&format=json`;
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
   if (!res.ok) return [];
   const data = await res.json();
@@ -90,9 +102,6 @@ async function fetchGdelt(query: string, maxRecords = 25): Promise<RssItem[]> {
   }));
 }
 
-// Strict RSS matching: an article must contain armed-conflict language AND
-// either (a) the conflict name, or (b) multiple parties for multi-country
-// conflicts, or (c) the single country for single-country conflicts.
 function matchConflictStrict(
   title: string,
   body: string,
@@ -100,25 +109,20 @@ function matchConflictStrict(
 ): string | null {
   const text = `${title} ${body}`.toLowerCase();
 
-  // Require at least one hard armed-conflict keyword — skip opinion, politics, economics
   const hasConflictContext = ARMED_CONFLICT_KEYWORDS.some(kw => text.includes(kw));
   if (!hasConflictContext) return null;
 
   for (const conflict of conflicts) {
-    // Strongest signal: the conflict name itself is mentioned
     if (text.includes(conflict.name.toLowerCase())) return conflict.id;
 
-    // For specific sub-regions (Tigray, Sahel, Kashmir, Gaza) check those words
     const specificTerms = conflict.name
       .split(/[-\s]+/)
       .filter(w => w.length > 4 && !CONFLICT_TYPE_WORDS.has(w.toLowerCase()));
     if (specificTerms.some(t => text.includes(t.toLowerCase()))) return conflict.id;
 
-    // For single-country conflicts, the country mention + conflict context is enough
     if (conflict.countries_involved.length === 1) {
       if (text.includes(conflict.countries_involved[0].toLowerCase())) return conflict.id;
     } else {
-      // Multi-country: require ≥2 of the involved countries to both appear
       const matches = conflict.countries_involved.filter(c => text.includes(c.toLowerCase()));
       if (matches.length >= 2) return conflict.id;
     }
@@ -127,7 +131,6 @@ function matchConflictStrict(
 }
 
 function parseGdeltDate(raw: string): string {
-  // GDELT format: 20240620T103000Z
   const m = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`;
   const d = new Date(raw);
@@ -140,19 +143,30 @@ async function runIngest(): Promise<{ inserted: number; skipped: number; message
     supabase.from('conflicts').select('id, name, type, countries_involved').neq('status', 'frozen'),
   ]);
 
-  const sources: any[] = sourcesRes.data ?? [];
+  const dbSources: any[] = sourcesRes.data ?? [];
   const conflicts: ConflictRow[] = (conflictsRes.data ?? []) as ConflictRow[];
 
-  if (sources.length === 0 || conflicts.length === 0) {
-    return { inserted: 0, skipped: 0, message: 'No sources or conflicts found' };
+  if (conflicts.length === 0) {
+    return { inserted: 0, skipped: 0, message: 'No active conflicts found' };
   }
+
+  // Merge database RSS sources with hardcoded reliable sources.
+  // Filter out dead Reuters/AP entries (they no longer offer public RSS).
+  const DEAD_SOURCE_PATTERNS = ['reuters.com', 'apnews.com'];
+  const dbRss = dbSources
+    .filter(s => s.type === 'rss')
+    .filter(s => !DEAD_SOURCE_PATTERNS.some(p => s.url.includes(p)));
+  const existingUrls = new Set(dbRss.map((s: any) => s.url));
+  const allRssSources = [
+    ...dbRss,
+    ...BUILTIN_RSS_SOURCES.filter(s => !existingUrls.has(s.url)),
+  ];
 
   const articles: NewsInsert[] = [];
 
-  // ── RSS sources ──────────────────────────────────────────────────────────
-  const rssSources = sources.filter(s => s.type === 'rss');
+  // ── RSS sources (parallel — different domains, no rate-limit concern) ─────
   await Promise.all(
-    rssSources.map(async (source) => {
+    allRssSources.map(async (source) => {
       const items = await fetchRss(source.url).catch(() => []);
       for (const item of items) {
         if (!item.link || !item.title) continue;
@@ -172,40 +186,40 @@ async function runIngest(): Promise<{ inserted: number; skipped: number; message
     })
   );
 
-  // ── GDELT: one targeted query per conflict ───────────────────────────────
-  const gdeltSource = sources.find(s => s.type === 'gdelt');
-  if (gdeltSource) {
-    await Promise.all(
-      conflicts.map(async (conflict) => {
-        const query = buildGdeltQuery(conflict);
-        const items = await fetchGdelt(query).catch(() => []);
-        for (const item of items) {
-          if (!item.link || !item.title) continue;
-          articles.push({
-            conflict_id: conflict.id,
-            headline: item.title,
-            url: item.link,
-            source: 'GDELT',
-            published_at: parseGdeltDate(item.pubDate ?? ''),
-            summary: '',
-          });
-        }
-      })
-    );
+  // ── GDELT: sequential to avoid rate-limiting ──────────────────────────────
+  // All 9 conflicts in parallel previously caused GDELT to throttle and return
+  // nothing for less-prominent conflicts (Haiti, Sahel, etc.).
+  const hasGdelt = dbSources.some(s => s.type === 'gdelt');
+  if (hasGdelt) {
+    for (const conflict of conflicts) {
+      const query = buildGdeltQuery(conflict);
+      const items = await fetchGdelt(query).catch(() => []);
+      for (const item of items) {
+        if (!item.link || !item.title) continue;
+        articles.push({
+          conflict_id: conflict.id,
+          headline: item.title,
+          url: item.link,
+          source: 'GDELT',
+          published_at: parseGdeltDate(item.pubDate ?? ''),
+          summary: '',
+        });
+      }
+    }
   }
 
   if (articles.length === 0) {
     return { inserted: 0, skipped: 0, message: 'No matching articles found' };
   }
 
-  // ── Deduplicate by URL ───────────────────────────────────────────────────
+  // ── Deduplicate by URL ────────────────────────────────────────────────────
   const candidateUrls = [...new Set(articles.map(a => a.url))];
   const { data: existing } = await supabase
     .from('news_items')
     .select('url')
     .in('url', candidateUrls);
-  const existingUrls = new Set((existing ?? []).map((r: any) => r.url));
-  const newArticles = articles.filter(a => !existingUrls.has(a.url));
+  const seenUrls = new Set((existing ?? []).map((r: any) => r.url));
+  const newArticles = articles.filter(a => !seenUrls.has(a.url));
 
   if (newArticles.length === 0) {
     return { inserted: 0, skipped: articles.length, message: 'All articles already exist' };
@@ -226,7 +240,6 @@ async function runIngest(): Promise<{ inserted: number; skipped: number; message
   };
 }
 
-// GET — called by Vercel Cron every 3 hours
 export async function GET() {
   try {
     const result = await runIngest();
@@ -236,7 +249,6 @@ export async function GET() {
   }
 }
 
-// POST — available for ad-hoc manual trigger if needed
 export async function POST() {
   try {
     const result = await runIngest();
