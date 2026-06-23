@@ -1,6 +1,6 @@
 {
   "buildCommand": "pnpm --filter @workspace/conflicts-dashboard build",
-  "outputDirectory": "artifacts/conflicts-dashboard/dist",
+  "outputDirectory": "artifacts/conflicts-dashboard/dist/public",
   "installCommand": "pnpm install",
   "framework": null
 }
