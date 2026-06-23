@@ -1,4 +1,3 @@
-import { Link } from 'wouter';
 import { cn } from '@/lib/utils/cn';
 
 interface HeaderProps {
@@ -15,32 +14,6 @@ export function Header({ className }: HeaderProps) {
               Global Conflict Dashboard
             </h1>
           </div>
-          <nav className="flex items-center space-x-6">
-            <Link
-              href="/"
-              className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/conflicts"
-              className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
-            >
-              Conflicts
-            </Link>
-            <Link
-              href="/news"
-              className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
-            >
-              News
-            </Link>
-            <Link
-              href="/about"
-              className="text-sm font-medium text-gray-300 hover:text-white transition-colors"
-            >
-              About
-            </Link>
-          </nav>
         </div>
       </div>
     </header>
