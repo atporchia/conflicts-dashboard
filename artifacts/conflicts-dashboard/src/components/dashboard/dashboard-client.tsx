@@ -3,6 +3,7 @@ import { useLocation } from 'wouter';
 import { ConflictStats } from '@/components/dashboard/conflict-stats';
 import { RecentUpdates } from '@/components/dashboard/recent-updates';
 import { ConflictDrawer } from '@/components/dashboard/conflict-drawer';
+import { supabase } from '@/lib/supabase/client';
 
 const ConflictMap = lazy(() =>
   import('@/components/map/conflict-map').then(m => ({ default: m.ConflictMap }))
@@ -11,18 +12,46 @@ const ConflictMap = lazy(() =>
 const REFRESH_INTERVAL = 60_000;
 
 async function fetchConflicts() {
-  const r = await fetch('/api/conflicts?limit=100');
-  const d = await r.json();
-  return d.data || [];
+  const { data } = await supabase
+    .from('conflicts')
+    .select('*')
+    .neq('status', 'frozen')
+    .order('name')
+    .limit(100);
+  return data || [];
 }
 
 async function fetchNews(country?: string) {
-  const url = country
-    ? `/api/news?limit=10&country=${encodeURIComponent(country)}`
-    : `/api/news?limit=20&exclude_frozen=true`;
-  const r = await fetch(url);
-  const d = await r.json();
-  return d.data || [];
+  if (country) {
+    const { data: matched } = await supabase
+      .from('conflicts')
+      .select('id')
+      .contains('countries_involved', [country]);
+    if (!matched || matched.length === 0) return [];
+    const { data } = await supabase
+      .from('news_items')
+      .select('*')
+      .in('conflict_id', matched.map((c: any) => c.id))
+      .order('published_at', { ascending: false })
+      .limit(10);
+    return data || [];
+  }
+  // Unfiltered: exclude articles linked to frozen conflicts
+  const { data: frozen } = await supabase
+    .from('conflicts')
+    .select('id')
+    .eq('status', 'frozen');
+  const frozenIds = (frozen || []).map((c: any) => c.id);
+  let query = supabase
+    .from('news_items')
+    .select('*')
+    .order('published_at', { ascending: false })
+    .limit(20);
+  if (frozenIds.length > 0) {
+    query = (query as any).not('conflict_id', 'in', `(${frozenIds.join(',')})`);
+  }
+  const { data } = await query;
+  return data || [];
 }
 
 interface DashboardClientProps {
