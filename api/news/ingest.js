@@ -1,8 +1,5 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-import { XMLParser } from 'fast-xml-parser';
-
-// ── Supabase clients ──────────────────────────────────────────────────────────
+const { createClient } = require('@supabase/supabase-js');
+const { XMLParser } = require('fast-xml-parser');
 
 function createAnonClient() {
   const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
@@ -17,8 +14,6 @@ function createServiceClient() {
   if (!url || !key) throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
   return createClient(url, key, { auth: { persistSession: false } });
 }
-
-// ── Constants ─────────────────────────────────────────────────────────────────
 
 const CONFLICT_TYPE_WORDS = new Set([
   'civil', 'war', 'internal', 'conflict', 'dispute', 'insurgency',
@@ -38,80 +33,43 @@ const ARMED_CONFLICT_KEYWORDS = [
 ];
 
 const BUILTIN_RSS_SOURCES = [
-  // Mainstream conflict reporting
-  { name: 'The Guardian World',              url: 'https://www.theguardian.com/world/rss' },
-  { name: 'Sky News World',                  url: 'https://feeds.skynews.com/feeds/rss/world.xml' },
-  { name: 'France 24 English',               url: 'https://www.france24.com/en/rss' },
-  { name: 'Deutsche Welle Africa',           url: 'https://rss.dw.com/rdf/rss-en-africa' },
-  { name: 'RFI English',                     url: 'https://www.rfi.fr/en/rss' },
-  { name: 'Middle East Eye',                 url: 'https://www.middleeasteye.net/rss' },
-  { name: 'UN News Peace',                   url: 'https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml' },
-  { name: 'ReliefWeb',                       url: 'https://reliefweb.int/updates/rss.xml' },
-  { name: 'Crisis Group',                    url: 'https://www.crisisgroup.org/rss.xml' },
-  // OSINT & investigative sources
-  { name: 'ISW',                             url: 'https://www.understandingwar.org/feeds/all.xml' },
-  { name: 'Bellingcat',                      url: 'https://www.bellingcat.com/feed/' },
-  { name: 'Oryx',                            url: 'https://www.oryxspioenkop.com/feeds/posts/default' },
-  // OSINT Telegram channels via RSSHub (public Telegram channels)
-  { name: 'OSINTdefender',                   url: 'https://rsshub.app/telegram/channel/osintdefender' },
-  { name: 'Intel Slava Z',                   url: 'https://rsshub.app/telegram/channel/intelslava' },
+  { name: 'The Guardian World',    url: 'https://www.theguardian.com/world/rss' },
+  { name: 'Sky News World',        url: 'https://feeds.skynews.com/feeds/rss/world.xml' },
+  { name: 'France 24 English',     url: 'https://www.france24.com/en/rss' },
+  { name: 'Deutsche Welle Africa', url: 'https://rss.dw.com/rdf/rss-en-africa' },
+  { name: 'RFI English',           url: 'https://www.rfi.fr/en/rss' },
+  { name: 'Middle East Eye',       url: 'https://www.middleeasteye.net/rss' },
+  { name: 'UN News Peace',         url: 'https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml' },
+  { name: 'ReliefWeb',             url: 'https://reliefweb.int/updates/rss.xml' },
+  { name: 'Crisis Group',          url: 'https://www.crisisgroup.org/rss.xml' },
+  { name: 'ISW',                   url: 'https://www.understandingwar.org/feeds/all.xml' },
+  { name: 'Bellingcat',            url: 'https://www.bellingcat.com/feed/' },
+  { name: 'Oryx',                  url: 'https://www.oryxspioenkop.com/feeds/posts/default' },
+  { name: 'OSINTdefender',         url: 'https://rsshub.app/telegram/channel/osintdefender' },
+  { name: 'Intel Slava Z',         url: 'https://rsshub.app/telegram/channel/intelslava' },
 ];
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface RssItem {
-  title?: string;
-  link?: string;
-  description?: string;
-  pubDate?: string;
-}
-
-interface ConflictRow {
-  id: string;
-  name: string;
-  type: string;
-  countries_involved: string[];
-}
-
-interface NewsInsert {
-  conflict_id: string;
-  headline: string;
-  url: string;
-  source: string;
-  published_at: string;
-  summary: string;
-}
-
-// ── GDELT ─────────────────────────────────────────────────────────────────────
-
-function buildGdeltQuery(conflict: ConflictRow): string {
+function buildGdeltQuery(conflict) {
   const nameTerms = conflict.name
     .split(/[-\s]+/)
     .filter(w => w.length > 3 && !CONFLICT_TYPE_WORDS.has(w.toLowerCase()))
     .map(w => `"${w}"`);
-  const countryTerms =
-    conflict.countries_involved.length > 1
-      ? conflict.countries_involved.map(c => `"${c}"`)
-      : [];
+  const countryTerms = conflict.countries_involved.length > 1
+    ? conflict.countries_involved.map(c => `"${c}"`)
+    : [];
   const allTerms = [...new Set([...nameTerms, ...countryTerms])];
   return `theme:WAR_CONFLICT sourcelang:english (${allTerms.join(' OR ')})`;
 }
 
-async function fetchGdelt(query: string, maxRecords = 25): Promise<RssItem[]> {
+async function fetchGdelt(query, maxRecords = 25) {
   const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=artlist&maxrecords=${maxRecords}&timespan=7d&format=json`;
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
   if (!res.ok) return [];
   const data = await res.json();
-  return (data.articles ?? []).map((a: any) => ({
-    title: a.title ?? '',
-    link: a.url ?? '',
-    pubDate: a.seendate ?? '',
-  }));
+  return (data.articles ?? []).map(a => ({ title: a.title ?? '', link: a.url ?? '', pubDate: a.seendate ?? '' }));
 }
 
-// ── RSS ───────────────────────────────────────────────────────────────────────
-
-async function fetchRss(url: string): Promise<RssItem[]> {
+async function fetchRss(url) {
   const res = await fetch(url, {
     headers: { 'User-Agent': 'GlobalConflictDashboard/1.0' },
     signal: AbortSignal.timeout(8000),
@@ -120,8 +78,8 @@ async function fetchRss(url: string): Promise<RssItem[]> {
   const xml = await res.text();
   const parser = new XMLParser({ ignoreAttributes: false });
   const parsed = parser.parse(xml);
-  const items: any[] = parsed?.rss?.channel?.item ?? parsed?.feed?.entry ?? [];
-  return (Array.isArray(items) ? items : [items]).map((item: any) => ({
+  const items = parsed?.rss?.channel?.item ?? parsed?.feed?.entry ?? [];
+  return (Array.isArray(items) ? items : [items]).map(item => ({
     title: item.title?.['#text'] ?? item.title ?? '',
     link: item.link?.['@_href'] ?? item.link ?? '',
     description: item.description ?? item.summary?.['#text'] ?? item.summary ?? '',
@@ -129,24 +87,7 @@ async function fetchRss(url: string): Promise<RssItem[]> {
   }));
 }
 
-// ── ACLED ─────────────────────────────────────────────────────────────────────
-
-interface AcledEvent {
-  event_id_cnty: string | number;
-  event_date: string;
-  event_type: string;
-  sub_event_type?: string;
-  actor1?: string;
-  actor2?: string;
-  country: string;
-  location?: string;
-  latitude?: string | number;
-  longitude?: string | number;
-  fatalities?: string | number;
-  notes?: string;
-}
-
-async function getAcledToken(): Promise<string | null> {
+async function getAcledToken() {
   const clientId = process.env.ACLED_CLIENT_ID;
   const clientSecret = process.env.ACLED_CLIENT_SECRET;
   if (!clientId || !clientSecret) return null;
@@ -160,18 +101,15 @@ async function getAcledToken(): Promise<string | null> {
     if (!res.ok) return null;
     const data = await res.json();
     return data.access_token ?? null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-async function fetchAcledEvents(countries: string[], token: string): Promise<AcledEvent[]> {
+async function fetchAcledEvents(countries, token) {
   const since = new Date();
   since.setDate(since.getDate() - 30);
   const sinceStr = since.toISOString().slice(0, 10);
   const todayStr = new Date().toISOString().slice(0, 10);
-
-  const results: AcledEvent[] = [];
+  const results = [];
   for (const country of countries) {
     try {
       const params = new URLSearchParams({
@@ -188,19 +126,14 @@ async function fetchAcledEvents(countries: string[], token: string): Promise<Acl
       if (!res.ok) continue;
       const data = await res.json();
       results.push(...(data.data ?? []));
-    } catch {
-      // skip this country on error
-    }
+    } catch { /* skip */ }
   }
   return results;
 }
 
-// ── Article matching ──────────────────────────────────────────────────────────
-
-function matchConflictStrict(title: string, body: string, conflicts: ConflictRow[]): string | null {
+function matchConflictStrict(title, body, conflicts) {
   const text = `${title} ${body}`.toLowerCase();
   if (!ARMED_CONFLICT_KEYWORDS.some(kw => text.includes(kw))) return null;
-
   for (const conflict of conflicts) {
     if (text.includes(conflict.name.toLowerCase())) return conflict.id;
     const specificTerms = conflict.name
@@ -217,37 +150,14 @@ function matchConflictStrict(title: string, body: string, conflicts: ConflictRow
   return null;
 }
 
-function parseGdeltDate(raw: string): string {
+function parseGdeltDate(raw) {
   const m = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`;
   const d = new Date(raw);
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
-// ── Conflict status auto-update ───────────────────────────────────────────────
-
-async function updateConflictStatusFromAcled(
-  conflict: ConflictRow,
-  events: AcledEvent[],
-  serviceClient: ReturnType<typeof createServiceClient>
-) {
-  const count = events.length;
-  const avgFatalities = count > 0
-    ? events.reduce((s, e) => s + Number(e.fatalities ?? 0), 0) / count
-    : 0;
-
-  const status = count === 0 ? 'de-escalating' : count < 5 ? 'ongoing' : 'escalating';
-  const intensity = avgFatalities > 10 ? 'high' : avgFatalities > 2 ? 'medium' : 'low';
-
-  await (serviceClient as any)
-    .from('conflicts')
-    .update({ status, intensity })
-    .eq('id', conflict.id);
-}
-
-// ── Main ingest ───────────────────────────────────────────────────────────────
-
-async function runIngest(): Promise<{ inserted: number; skipped: number; acled_events: number; message?: string }> {
+async function runIngest() {
   const supabase = createAnonClient();
   const serviceClient = createServiceClient();
 
@@ -256,47 +166,39 @@ async function runIngest(): Promise<{ inserted: number; skipped: number; acled_e
     supabase.from('conflicts').select('id, name, type, countries_involved').neq('status', 'frozen'),
   ]);
 
-  const dbSources: any[] = sourcesRes.data ?? [];
-  const conflicts: ConflictRow[] = (conflictsRes.data ?? []) as ConflictRow[];
+  const dbSources = sourcesRes.data ?? [];
+  const conflicts = conflictsRes.data ?? [];
 
   if (conflicts.length === 0) {
     return { inserted: 0, skipped: 0, acled_events: 0, message: 'No active conflicts found' };
   }
 
-  // Merge DB RSS sources with builtins, filtering dead Reuters/AP URLs
   const DEAD_SOURCE_PATTERNS = ['reuters.com', 'apnews.com'];
   const dbRss = dbSources
     .filter(s => s.type === 'rss')
     .filter(s => !DEAD_SOURCE_PATTERNS.some(p => s.url.includes(p)));
-  const existingUrls = new Set(dbRss.map((s: any) => s.url));
-  const allRssSources = [
-    ...dbRss,
-    ...BUILTIN_RSS_SOURCES.filter(s => !existingUrls.has(s.url)),
-  ];
+  const existingUrls = new Set(dbRss.map(s => s.url));
+  const allRssSources = [...dbRss, ...BUILTIN_RSS_SOURCES.filter(s => !existingUrls.has(s.url))];
 
-  const articles: NewsInsert[] = [];
+  const articles = [];
 
-  // RSS — parallel (different domains, no rate-limit concern)
-  await Promise.all(
-    allRssSources.map(async (source) => {
-      const items = await fetchRss(source.url).catch(() => []);
-      for (const item of items) {
-        if (!item.link || !item.title) continue;
-        const conflictId = matchConflictStrict(item.title, item.description ?? '', conflicts);
-        if (!conflictId) continue;
-        articles.push({
-          conflict_id: conflictId,
-          headline: item.title,
-          url: item.link,
-          source: source.name,
-          published_at: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-          summary: item.description?.slice(0, 500) ?? '',
-        });
-      }
-    })
-  );
+  await Promise.all(allRssSources.map(async (source) => {
+    const items = await fetchRss(source.url).catch(() => []);
+    for (const item of items) {
+      if (!item.link || !item.title) continue;
+      const conflictId = matchConflictStrict(item.title, item.description ?? '', conflicts);
+      if (!conflictId) continue;
+      articles.push({
+        conflict_id: conflictId,
+        headline: item.title,
+        url: item.link,
+        source: source.name,
+        published_at: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+        summary: item.description?.slice(0, 500) ?? '',
+      });
+    }
+  }));
 
-  // GDELT — sequential to avoid rate-limiting
   const hasGdelt = dbSources.some(s => s.type === 'gdelt');
   if (hasGdelt) {
     for (const conflict of conflicts) {
@@ -316,7 +218,6 @@ async function runIngest(): Promise<{ inserted: number; skipped: number; acled_e
     }
   }
 
-  // ACLED — fetch events, store in conflict_events, update conflict status
   let acledEventsInserted = 0;
   const acledToken = await getAcledToken();
   if (acledToken) {
@@ -338,38 +239,35 @@ async function runIngest(): Promise<{ inserted: number; skipped: number; acled_e
           fatalities: Number(e.fatalities ?? 0),
           notes: e.notes?.slice(0, 1000) ?? null,
         }));
-        const { data: inserted } = await (serviceClient as any)
+        const { data: inserted } = await serviceClient
           .from('conflict_events')
           .upsert(rows, { onConflict: 'acled_event_id', ignoreDuplicates: true })
           .select('id');
         acledEventsInserted += inserted?.length ?? 0;
-        await updateConflictStatusFromAcled(conflict, events, serviceClient);
+
+        const count = events.length;
+        const avgFatalities = events.reduce((s, e) => s + Number(e.fatalities ?? 0), 0) / count;
+        const status = count === 0 ? 'de-escalating' : count < 5 ? 'ongoing' : 'escalating';
+        const intensity = avgFatalities > 10 ? 'high' : avgFatalities > 2 ? 'medium' : 'low';
+        await serviceClient.from('conflicts').update({ status, intensity }).eq('id', conflict.id);
       }
     }
   }
 
-  // Deduplicate news articles by URL
   if (articles.length === 0) {
     return { inserted: 0, skipped: 0, acled_events: acledEventsInserted, message: 'No matching articles found' };
   }
 
   const candidateUrls = [...new Set(articles.map(a => a.url))];
-  const { data: existing } = await supabase
-    .from('news_items')
-    .select('url')
-    .in('url', candidateUrls);
-  const seenUrls = new Set((existing ?? []).map((r: any) => r.url));
+  const { data: existing } = await supabase.from('news_items').select('url').in('url', candidateUrls);
+  const seenUrls = new Set((existing ?? []).map(r => r.url));
   const newArticles = articles.filter(a => !seenUrls.has(a.url));
 
   if (newArticles.length === 0) {
     return { inserted: 0, skipped: articles.length, acled_events: acledEventsInserted, message: 'All articles already exist' };
   }
 
-  const { data: insertedNews, error } = await (serviceClient as any)
-    .from('news_items')
-    .insert(newArticles)
-    .select('id');
-
+  const { data: insertedNews, error } = await serviceClient.from('news_items').insert(newArticles).select('id');
   if (error) throw new Error(error.message);
 
   return {
@@ -379,15 +277,13 @@ async function runIngest(): Promise<{ inserted: number; skipped: number; acled_e
   };
 }
 
-// ── Vercel handler ────────────────────────────────────────────────────────────
-
-function isAuthorized(req: VercelRequest): boolean {
+function isAuthorized(req) {
   const secret = process.env.INGEST_SECRET;
   if (!secret) return true;
   return req.headers['x-ingest-secret'] === secret;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -397,7 +293,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const result = await runIngest();
     return res.status(200).json(result);
-  } catch (err: any) {
+  } catch (err) {
     return res.status(500).json({ error: err.message ?? 'Internal server error' });
   }
-}
+};
