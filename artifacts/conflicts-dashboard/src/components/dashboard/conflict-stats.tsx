@@ -112,18 +112,18 @@ export function ConflictStats({ conflicts, news, selectedCountry, onClearCountry
 
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
         <p className="text-xs text-gray-500 uppercase tracking-wide mb-3">Intensity</p>
-        <div className="flex items-end gap-2 h-16">
+        <div className="flex items-end gap-2">
           {[
             { label: 'High', count: high, color: '#ef4444' },
             { label: 'Med', count: medium, color: '#f97316' },
             { label: 'Low', count: low, color: '#eab308' },
           ].map(({ label, count, color }) => {
             const maxVal = Math.max(high, medium, low, 1);
-            const h = Math.round((count / maxVal) * 100);
+            const barH = Math.max(Math.round((count / maxVal) * 48), count > 0 ? 4 : 2);
             return (
               <div key={label} className="flex-1 flex flex-col items-center gap-1">
                 <span className="text-xs text-gray-400">{count}</span>
-                <div className="w-full rounded-t-sm" style={{ height: `${Math.max(h * 0.48, count > 0 ? 4 : 2)}px`, background: color, opacity: count > 0 ? 0.85 : 0.2 }} />
+                <div className="w-full rounded-t-sm" style={{ height: `${barH}px`, background: color, opacity: count > 0 ? 0.85 : 0.2 }} />
                 <span className="text-xs text-gray-500">{label}</span>
               </div>
             );
